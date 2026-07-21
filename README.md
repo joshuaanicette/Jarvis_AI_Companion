@@ -1405,7 +1405,7 @@ This project demonstrates experience with:
 
 ## Author
 
-**Josh**
+**Joshua Anicette**
 
 Computer Engineering Student
 Interested in artificial intelligence, embedded systems, robotics, software engineering, and entrepreneurship.
