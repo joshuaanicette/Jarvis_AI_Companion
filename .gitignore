@@ -1,0 +1,14 @@
+.ai/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+logs/*.log
+data/memory/*.json
+data/conversations/*
+data/sensor_logs/*
+models/**/*.onnx
+models/**/*.pt
+.env

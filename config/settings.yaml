@@ -1,0 +1,41 @@
+assistant:
+  name: Jay
+  version: "0.2.0"
+  mode: development
+
+llm:
+  provider: ollama
+  host: http://localhost:11434
+  model: gemma3:1b
+
+memory:
+  enabled: true
+  importance_threshold: 0.80
+
+voice:
+  enabled: true
+  wake_word: jay
+  tts_engine: piper
+  stt_engine: faster-whisper
+
+vision:
+  enabled: true
+  camera_index: 0
+  width: 1280
+  height: 720
+  fps: 30
+  model: yolo11n.pt
+  confidence: 0.45
+
+robotics:
+  enabled: false
+
+logging:
+  level: INFO
+
+web:
+  chat:
+    enabled: true
+    host: 127.0.0.1
+    port: 8780
+    open_browser: true

@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+    <title>Jay Navigation Intelligence</title>
+
+    <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    >
+    <style>
+:root {
+    --page-bg: #06101d;
+    --page-bg-soft: #091827;
+    --panel: rgba(17, 34, 54, 0.94);
+    --panel-strong: #13283f;
+    --panel-soft: rgba(255, 255, 255, 0.045);
+    --border: rgba(160, 193, 226, 0.16);
+    --border-strong: rgba(93, 175, 255, 0.5);
+    --text: #f5f8fc;
+    --text-soft: #c7d2df;
+    --muted: #8fa3b8;
+    --primary: #5aaeff;
+    --primary-deep: #3978ef;
+    --success: #5ed6a0;
+    --warning: #ffc96b;
+    --danger: #ff8196;
+    --shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.32);
+    --shadow-md: 0 14px 36px rgba(0, 0, 0, 0.24);
+    --radius-xl: 24px;
+    --radius-lg: 18px;
+    --radius-md: 13px;
+    --radius-sm: 9px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    color-scheme: dark;
+}
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    overflow-x: hidden;
+    font-family:
+        Inter,
+        ui-sans-serif,
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+    color: var(--text);
+    background:
+        radial-gradient(
+            circle at 12% 0%,
+            rgba(52, 137, 255, 0.18),
+            transparent 30rem
+        ),
+        radial-gradient(
+            circle at 92% 18%,
+            rgba(21, 190, 181, 0.11),
+            transparent 28rem
+        ),
+        linear-gradient(
+            145deg,
+            var(--page-bg),
+            var(--page-bg-soft) 55%,
+            #071522
+        );
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
+.page-shell {
+    width: min(1180px, calc(100% - 34px));
+    margin: 0 auto;
+    padding: 28px 0 52px;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand-mark {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 15px;
+    background:
+        linear-gradient(
+            140deg,
+            #65baff,
+            #3979ed
+        );
+    box-shadow:
+        0 12px 28px rgba(55, 129, 245, 0.34),
+        inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    font-size: 1.15rem;
+    font-weight: 850;
+}
+
+.brand h1 {
+    margin: 0;
+    letter-spacing: -0.025em;
+    font-size: clamp(1.25rem, 2.8vw, 1.7rem);
+}
+
+.brand p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 0.8rem;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    padding: 9px 13px;
+    border: 1px solid rgba(94, 214, 160, 0.28);
+    border-radius: 999px;
+    background: rgba(94, 214, 160, 0.09);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.14);
+    color: #aff0d1;
+    font-size: 0.73rem;
+    font-weight: 700;
+}
+
+.status-badge span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 12px rgba(94, 214, 160, 0.9);
+}
+
+.mode-tabs {
+    display: inline-grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 5px;
+    margin-bottom: 13px;
+    padding: 5px;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: rgba(8, 21, 35, 0.88);
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(16px);
+}
+
+.tab-button {
+    min-height: 38px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: #afc0d1;
+    font-size: 0.77rem;
+    font-weight: 720;
+    transition:
+        background 0.2s ease,
+        color 0.2s ease,
+        transform 0.2s ease;
+}
+
+.tab-button:hover {
+    background: rgba(255, 255, 255, 0.055);
+    color: white;
+}
+
+.tab-button.active {
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary-deep)
+        );
+    box-shadow:
+        0 9px 22px rgba(55, 128, 239, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    color: white;
+}
+
+.input-panel {
+    display: none;
+    grid-template-columns:
+        minmax(210px, 0.9fr)
+        minmax(280px, 1.45fr)
+        auto;
+    gap: 12px;
+    align-items: end;
+    margin-bottom: 16px;
+    padding: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(17, 35, 56, 0.94),
+            rgba(10, 25, 41, 0.94)
+        );
+    box-shadow: var(--shadow-md);
+    backdrop-filter: blur(18px);
+}
+
+.input-panel.active {
+    display: grid;
+}
+
+.input-panel > div:not(.source-card) {
+    min-width: 0;
+}
+
+.input-panel label {
+    display: block;
+    margin: 0 0 7px 2px;
+    color: var(--text-soft);
+    font-size: 0.7rem;
+    font-weight: 720;
+}
+
+.input-panel input {
+    width: 100%;
+    min-width: 0;
+    min-height: 48px;
+    padding: 0 15px;
+    border: 1px solid transparent;
+    border-radius: 11px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.06);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.18);
+    color: white;
+    transition:
+        border-color 0.2s ease,
+        background 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.input-panel input::placeholder {
+    color: #71859a;
+}
+
+.input-panel input:focus {
+    border-color: rgba(90, 174, 255, 0.72);
+    background: rgba(255, 255, 255, 0.075);
+    box-shadow:
+        0 0 0 4px rgba(90, 174, 255, 0.1),
+        inset 0 1px 2px rgba(0, 0, 0, 0.16);
+}
+
+.input-panel > button {
+    min-height: 48px;
+    padding: 0 21px;
+    border: 0;
+    border-radius: 11px;
+    background:
+        linear-gradient(
+            135deg,
+            var(--primary),
+            var(--primary-deep)
+        );
+    box-shadow:
+        0 10px 24px rgba(55, 128, 239, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    color: white;
+    font-size: 0.76rem;
+    font-weight: 780;
+    transition:
+        transform 0.2s ease,
+        filter 0.2s ease;
+}
+
+.input-panel > button:hover {
+    transform: translateY(-1px);
+    filter: brightness(1.08);
+}
+
+.source-card {
+    min-height: 48px;
+    padding: 10px 13px;
+    border: 1px solid var(--border);
+    border-radius: 11px;
+    background:
+        linear-gradient(
+            145deg,
+            rgba(255, 255, 255, 0.052),
+            rgba(255, 255, 255, 0.025)
+        );
+}
+
+.source-card strong,
+.source-card span {
+    display: block;
+}
+
+.source-card strong {
+    color: var(--text-soft);
+    font-size: 0.75rem;
+}
+
+.source-card span {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 0.67rem;
+    line-height: 1.35;
+}
+
+.message {
+    display: none;
+    margin-bottom: 16px;
+    padding: 13px 15px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 630;
+}
+
+.message.success,
+.message.error,
+.message.info {
+    display: block;
+}
+
+.message.success {
+    border: 1px solid rgba(94, 214, 160, 0.28);
+    background: rgba(94, 214, 160, 0.09);
+    color: #aef0d0;
+}
+
+.message.error {
+    border: 1px solid rgba(255, 129, 150, 0.28);
+    background: rgba(255, 129, 150, 0.09);
+    color: #ffb5c0;
+}
+
+.message.info {
+    border: 1px solid rgba(90, 174, 255, 0.28);
+    background: rgba(90, 174, 255, 0.09);
+    color: #bbddff;
+}
+
+.hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.48fr) minmax(280px, 0.62fr);
+    gap: 16px;
+}
+
+.map-card,
+.summary-card,
+.travel-mode-card,
+.journey-card {
+    border: 1px solid var(--border);
+    background:
+        linear-gradient(
+            145deg,
+            rgba(22, 42, 65, 0.97),
+            rgba(13, 28, 46, 0.97)
+        );
+    box-shadow: var(--shadow-lg);
+}
+
+.map-card,
+.summary-card,
+.journey-card {
+    border-radius: var(--radius-xl);
+}
+
+.map-card {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.card-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    min-height: 78px;
+    padding: 18px 19px;
+    border-bottom: 1px solid var(--border);
+}
+
+.card-heading h2,
+.summary-card h2,
+.journey-card h2 {
+    margin: 0;
+    letter-spacing: -0.015em;
+    font-size: 1rem;
+}
+
+.card-heading p {
+    margin: 5px 0 0;
+    color: var(--muted);
+    font-size: 0.7rem;
+}
+
+.secondary-button {
+    flex: 0 0 auto;
+    min-height: 36px;
+    padding: 0 13px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.055);
+    color: var(--text-soft);
+    font-size: 0.7rem;
+    font-weight: 720;
+}
+
+.secondary-button:hover {
+    border-color: var(--border-strong);
+    background: rgba(90, 174, 255, 0.09);
+    color: white;
+}
+
+#map {
+    width: 100%;
+    height: 470px;
+    background: #e9ecef;
+}
+
+.leaflet-control-zoom a {
+    background: #14263a !important;
+    color: white !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+.leaflet-control-attribution {
+    background: rgba(6, 16, 29, 0.72) !important;
+    color: #a9b7c6 !important;
+}
+
+.leaflet-control-attribution a {
+    color: #c9dbed !important;
+}
+
+.summary-card {
+    padding: 22px;
+}
+
+.summary-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-bottom: 20px;
+    border: 1px solid rgba(255, 201, 107, 0.12);
+    border-radius: 13px;
+    background: rgba(255, 201, 107, 0.11);
+    font-size: 1.2rem;
+}
+
+.summary-card h2 {
+    margin-bottom: 16px;
+}
+
+.summary-row {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.summary-row:last-child {
+    border-bottom: 0;
+}
+
+.summary-row span,
+.journey-grid span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.65rem;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.055em;
+}
+
+.summary-row strong,
+.journey-grid strong {
+    display: block;
+    margin-top: 6px;
+    color: var(--text-soft);
+    font-size: 0.76rem;
+    line-height: 1.42;
+    word-break: break-word;
+}
+
+.travel-mode-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+}
+
+.travel-mode-card {
+    position: relative;
+    overflow: hidden;
+    min-height: 128px;
+    padding: 18px;
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition:
+        transform 0.2s ease,
+        border-color 0.2s ease,
+        box-shadow 0.2s ease;
+}
+
+.travel-mode-card::after {
+    position: absolute;
+    inset: auto -32px -48px auto;
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: rgba(90, 174, 255, 0.07);
+    content: "";
+}
+
+.travel-mode-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(90, 174, 255, 0.42);
+}
+
+.travel-mode-card.active {
+    transform: translateY(-3px);
+    border-color: rgba(90, 174, 255, 0.75);
+    box-shadow:
+        0 18px 42px rgba(0, 0, 0, 0.28),
+        0 0 0 1px rgba(90, 174, 255, 0.12);
+}
+
+.mode-heading {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 720;
+}
+
+.travel-mode-card strong {
+    position: relative;
+    z-index: 1;
+    display: block;
+    margin-top: 15px;
+    letter-spacing: -0.025em;
+    font-size: 1.55rem;
+}
+
+.travel-mode-card p {
+    position: relative;
+    z-index: 1;
+    margin: 6px 0 0;
+    color: var(--muted);
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.journey-card {
+    padding: 20px;
+}
+
+.journey-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.journey-grid > div {
+    min-width: 0;
+    padding: 15px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+footer {
+    margin-top: 22px;
+    color: #64798f;
+    text-align: center;
+    font-size: 0.66rem;
+}
+
+@media (max-width: 920px) {
+    .hero-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .summary-card {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 18px;
+    }
+
+    .summary-icon,
+    .summary-card h2 {
+        grid-column: 1 / -1;
+    }
+}
+
+@media (max-width: 760px) {
+    .page-shell {
+        width: min(100% - 22px, 1180px);
+        padding-top: 18px;
+    }
+
+    .topbar {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .mode-tabs {
+        display: grid;
+        width: 100%;
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .tab-button {
+        padding: 0 8px;
+    }
+
+    .input-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .input-panel > button {
+        width: 100%;
+    }
+
+    .travel-mode-grid,
+    .journey-grid,
+    .summary-card {
+        grid-template-columns: 1fr;
+    }
+
+    #map {
+        height: 390px;
+    }
+}
+
+@media (max-width: 480px) {
+    .brand-mark {
+        width: 43px;
+        height: 43px;
+        flex-basis: 43px;
+    }
+
+    .brand p {
+        display: none;
+    }
+
+    .mode-tabs {
+        grid-template-columns: 1fr;
+    }
+
+    .card-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    #map {
+        height: 330px;
+    }
+}
+</style>
+</head>
+
+<body>
+<div class="page-shell">
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-mark">J</div>
+
+            <div>
+                <h1>Jay Navigation Intelligence</h1>
+                <p>
+                    Route planning, live location, distance,
+                    and estimated travel time
+                </p>
+            </div>
+        </div>
+
+        <div class="status-badge">
+            <span></span>
+            Navigation service online
+        </div>
+    </header>
+
+    <nav class="mode-tabs">
+        <button
+            class="tab-button active"
+            data-panel="manualPanel"
+            type="button"
+        >
+            Manual Route
+        </button>
+
+        <button
+            class="tab-button"
+            data-panel="homePanel"
+            type="button"
+        >
+            From Home
+        </button>
+
+        <button
+            class="tab-button"
+            data-panel="currentPanel"
+            type="button"
+        >
+            Current Location
+        </button>
+    </nav>
+
+    <section
+        id="manualPanel"
+        class="input-panel active"
+    >
+        <div>
+            <label for="manualStart">Starting point</label>
+            <input
+                id="manualStart"
+                type="text"
+                placeholder="Enter Point A"
+            >
+        </div>
+
+        <div>
+            <label for="manualDestination">
+                Destination
+            </label>
+            <input
+                id="manualDestination"
+                type="text"
+                placeholder="Enter Point B"
+            >
+        </div>
+
+        <button
+            id="manualRouteButton"
+            type="button"
+        >
+            Calculate Driving Route
+        </button>
+    </section>
+
+    <section
+        id="homePanel"
+        class="input-panel"
+    >
+        <div class="source-card">
+            <strong>Saved home address</strong>
+            <span>
+                3833 Baring St, Philadelphia, PA 19104
+            </span>
+        </div>
+
+        <div>
+            <label for="homeDestination">
+                Destination
+            </label>
+            <input
+                id="homeDestination"
+                type="text"
+                placeholder="Enter Point B"
+            >
+        </div>
+
+        <button
+            id="homeRouteButton"
+            type="button"
+        >
+            Compare From Home
+        </button>
+    </section>
+
+    <section
+        id="currentPanel"
+        class="input-panel"
+    >
+        <div class="source-card">
+            <strong>Use browser location</strong>
+            <span id="accuracyText">
+                Your browser will request permission.
+            </span>
+        </div>
+
+        <div>
+            <label for="currentDestination">
+                Destination
+            </label>
+            <input
+                id="currentDestination"
+                type="text"
+                placeholder="Enter Point B"
+            >
+        </div>
+
+        <button
+            id="currentRouteButton"
+            type="button"
+        >
+            Use My Location
+        </button>
+    </section>
+
+    <div
+        id="message"
+        class="message"
+        role="alert"
+    ></div>
+
+    <main>
+        <section class="hero-grid">
+            <article class="map-card">
+                <div class="card-heading">
+                    <div>
+                        <h2 id="mapTitle">
+                            Philadelphia area
+                        </h2>
+                        <p>
+                            Select a travel mode card to display
+                            its route.
+                        </p>
+                    </div>
+
+                    <button
+                        id="resetMapButton"
+                        class="secondary-button"
+                        type="button"
+                    >
+                        Reset Map
+                    </button>
+                </div>
+
+                <div id="map"></div>
+            </article>
+
+            <article class="summary-card">
+                <div class="summary-icon">🧭</div>
+                <h2>Route Summary</h2>
+
+                <div class="summary-row">
+                    <span>Starting point</span>
+                    <strong id="summaryStart">
+                        Not selected
+                    </strong>
+                </div>
+
+                <div class="summary-row">
+                    <span>Destination</span>
+                    <strong id="summaryDestination">
+                        Not selected
+                    </strong>
+                </div>
+
+                <div class="summary-row">
+                    <span>Selected mode</span>
+                    <strong id="summaryMode">
+                        None
+                    </strong>
+                </div>
+
+                <div class="summary-row">
+                    <span>Location source</span>
+                    <strong id="summarySource">
+                        None
+                    </strong>
+                </div>
+
+                <div class="summary-row">
+                    <span>Route provider</span>
+                    <strong id="summaryProvider">
+                        None
+                    </strong>
+                </div>
+            </article>
+        </section>
+
+        <section
+            id="travelModeGrid"
+            class="travel-mode-grid"
+        >
+            <article
+                class="travel-mode-card"
+                data-mode="driving"
+            >
+                <div class="mode-heading">
+                    <span>Driving</span>
+                    <span>🚗</span>
+                </div>
+
+                <strong id="drivingTime">--</strong>
+                <p id="drivingDistance">
+                    No route loaded
+                </p>
+            </article>
+
+            <article
+                class="travel-mode-card"
+                data-mode="walking"
+            >
+                <div class="mode-heading">
+                    <span>Walking</span>
+                    <span>🚶</span>
+                </div>
+
+                <strong id="walkingTime">--</strong>
+                <p id="walkingDistance">
+                    No route loaded
+                </p>
+            </article>
+
+            <article
+                class="travel-mode-card"
+                data-mode="transit"
+            >
+                <div class="mode-heading">
+                    <span>Transit</span>
+                    <span>🚆</span>
+                </div>
+
+                <strong id="transitTime">--</strong>
+                <p id="transitDistance">
+                    No route loaded
+                </p>
+            </article>
+        </section>
+
+        <section class="journey-card">
+            <h2>Journey details</h2>
+
+            <div class="journey-grid">
+                <div>
+                    <span>Starting location</span>
+                    <strong id="journeyStart">
+                        Not selected
+                    </strong>
+                </div>
+
+                <div>
+                    <span>Destination</span>
+                    <strong id="journeyDestination">
+                        Not selected
+                    </strong>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        Powered by Jay, Google Geocoding, Google Routes,
+        Leaflet, and OpenStreetMap
+    </footer>
+</div>
+
+<script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+></script>
+<script>
+const DEFAULT_CENTER = [39.9526, -75.1652];
+const DEFAULT_ZOOM = 12;
+
+const map = L.map("map").setView(
+    DEFAULT_CENTER,
+    DEFAULT_ZOOM
+);
+
+L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+        maxZoom: 19,
+        attribution:
+            "&copy; OpenStreetMap contributors"
+    }
+).addTo(map);
+
+let latestComparison = null;
+let activeRouteLayer = null;
+let startMarker = null;
+let destinationMarker = null;
+
+const message = document.getElementById("message");
+const mapTitle = document.getElementById("mapTitle");
+const summaryStart = document.getElementById("summaryStart");
+const summaryDestination = document.getElementById(
+    "summaryDestination"
+);
+const summaryMode = document.getElementById("summaryMode");
+const summarySource = document.getElementById(
+    "summarySource"
+);
+const summaryProvider = document.getElementById(
+    "summaryProvider"
+);
+const journeyStart = document.getElementById("journeyStart");
+const journeyDestination = document.getElementById(
+    "journeyDestination"
+);
+const accuracyText = document.getElementById("accuracyText");
+
+function showMessage(text, type = "info") {
+    message.textContent = text;
+    message.className = `message ${type}`;
+}
+
+function clearMessage() {
+    message.textContent = "";
+    message.className = "message";
+}
+
+function setButtonsDisabled(disabled) {
+    [
+        "manualRouteButton",
+        "homeRouteButton",
+        "currentRouteButton"
+    ].forEach(id => {
+        document.getElementById(id).disabled = disabled;
+    });
+}
+
+function formatDuration(minutes) {
+    const total = Math.max(
+        0,
+        Math.round(minutes || 0)
+    );
+
+    if (total < 60) {
+        return `${total} min`;
+    }
+
+    const hours = Math.floor(total / 60);
+    const remaining = total % 60;
+
+    return remaining
+        ? `${hours} hr ${remaining} min`
+        : `${hours} hr`;
+}
+
+function clearMapLayers() {
+    [
+        activeRouteLayer,
+        startMarker,
+        destinationMarker
+    ].forEach(layer => {
+        if (layer) {
+            map.removeLayer(layer);
+        }
+    });
+
+    activeRouteLayer = null;
+    startMarker = null;
+    destinationMarker = null;
+}
+
+function updateModeCard(mode, route) {
+    const time = document.getElementById(
+        `${mode}Time`
+    );
+    const distance = document.getElementById(
+        `${mode}Distance`
+    );
+
+    if (!route || !route.available) {
+        time.textContent = "Unavailable";
+        distance.textContent = (
+            route?.error || "No route returned"
+        );
+        return;
+    }
+
+    time.textContent = formatDuration(
+        route.duration_minutes
+    );
+
+    distance.textContent =
+        `${route.distance_miles.toFixed(1)} miles`;
+}
+
+function renderComparison(
+    comparison,
+    sourceLabel
+) {
+    latestComparison = comparison;
+
+    summaryStart.textContent =
+        comparison.start.label;
+    summaryDestination.textContent =
+        comparison.destination.label;
+    journeyStart.textContent =
+        comparison.start.label;
+    journeyDestination.textContent =
+        comparison.destination.label;
+    summarySource.textContent = sourceLabel;
+    summaryProvider.textContent = "Google Routes";
+    mapTitle.textContent =
+        comparison.destination.label.split(",")[0];
+
+    ["driving", "walking", "transit"].forEach(
+        mode => updateModeCard(
+            mode,
+            comparison.routes[mode]
+        )
+    );
+
+    const firstAvailable = [
+        "driving",
+        "walking",
+        "transit"
+    ].find(
+        mode => comparison.routes[mode]?.available
+    );
+
+    if (firstAvailable) {
+        displayComparisonRoute(firstAvailable);
+    }
+
+    showMessage(
+        "Driving, walking, and transit routes loaded.",
+        "success"
+    );
+}
+
+function renderManualRoute(route) {
+    latestComparison = {
+        start: route.start,
+        destination: route.destination,
+        routes: {
+            driving: {
+                available: true,
+                duration_minutes:
+                    route.duration_minutes,
+                distance_miles:
+                    route.distance_miles,
+                geometry: route.geometry
+            },
+            walking: {
+                available: false,
+                error:
+                    "Use From Home or Current Location for walking."
+            },
+            transit: {
+                available: false,
+                error:
+                    "Use From Home or Current Location for transit."
+            }
+        }
+    };
+
+    summaryStart.textContent = route.start.label;
+    summaryDestination.textContent =
+        route.destination.label;
+    journeyStart.textContent = route.start.label;
+    journeyDestination.textContent =
+        route.destination.label;
+    summarySource.textContent = "Manual addresses";
+    summaryProvider.textContent = "OSRM";
+    mapTitle.textContent =
+        route.destination.label.split(",")[0];
+
+    updateModeCard(
+        "driving",
+        latestComparison.routes.driving
+    );
+    updateModeCard(
+        "walking",
+        latestComparison.routes.walking
+    );
+    updateModeCard(
+        "transit",
+        latestComparison.routes.transit
+    );
+
+    displayComparisonRoute("driving");
+
+    showMessage(
+        "Manual driving route calculated successfully.",
+        "success"
+    );
+}
+
+function displayComparisonRoute(mode) {
+    if (!latestComparison) {
+        return;
+    }
+
+    const route = latestComparison.routes[mode];
+
+    if (!route || !route.available) {
+        showMessage(
+            `${mode} route is unavailable.`,
+            "error"
+        );
+        return;
+    }
+
+    clearMapLayers();
+
+    startMarker = L.marker(
+        [
+            latestComparison.start.latitude,
+            latestComparison.start.longitude
+        ]
+    ).addTo(map);
+
+    destinationMarker = L.marker(
+        [
+            latestComparison.destination.latitude,
+            latestComparison.destination.longitude
+        ]
+    ).addTo(map);
+
+    if (route.geometry?.length) {
+        activeRouteLayer = L.polyline(
+            route.geometry,
+            {
+                weight: 6,
+                opacity: 0.9
+            }
+        ).addTo(map);
+    }
+
+    const layers = [
+        startMarker,
+        destinationMarker
+    ];
+
+    if (activeRouteLayer) {
+        layers.push(activeRouteLayer);
+    }
+
+    map.fitBounds(
+        L.featureGroup(layers).getBounds(),
+        {
+            padding: [40, 40]
+        }
+    );
+
+    summaryMode.textContent =
+        mode.charAt(0).toUpperCase()
+        + mode.slice(1);
+
+    document
+        .querySelectorAll(".travel-mode-card")
+        .forEach(card => {
+            card.classList.toggle(
+                "active",
+                card.dataset.mode === mode
+            );
+        });
+}
+
+async function postJson(url, payload) {
+    setButtonsDisabled(true);
+    clearMessage();
+
+    try {
+        const response = await fetch(
+            url,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+                body: JSON.stringify(payload)
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                result.detail
+                || "The route request failed."
+            );
+        }
+
+        return result;
+
+    } finally {
+        setButtonsDisabled(false);
+    }
+}
+
+function getAccurateCurrentPosition() {
+    return new Promise((resolve, reject) => {
+        if (!navigator.geolocation) {
+            reject(
+                new Error(
+                    "This browser does not support geolocation."
+                )
+            );
+            return;
+        }
+
+        let bestPosition = null;
+        let watchId = null;
+
+        const desiredAccuracy = 75;
+        const maximumWait = 20000;
+
+        const timer = window.setTimeout(
+            () => {
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(
+                        watchId
+                    );
+                }
+
+                if (bestPosition) {
+                    resolve(bestPosition);
+                } else {
+                    reject(
+                        new Error(
+                            "A current location could not be obtained."
+                        )
+                    );
+                }
+            },
+            maximumWait
+        );
+
+        watchId = navigator.geolocation.watchPosition(
+            position => {
+                if (
+                    !bestPosition
+                    || position.coords.accuracy
+                        < bestPosition.coords.accuracy
+                ) {
+                    bestPosition = position;
+                }
+
+                accuracyText.textContent =
+                    `Best reading: approximately ` +
+                    `${Math.round(
+                        position.coords.accuracy
+                    )} meters`;
+
+                if (
+                    position.coords.accuracy
+                    <= desiredAccuracy
+                ) {
+                    window.clearTimeout(timer);
+                    navigator.geolocation.clearWatch(
+                        watchId
+                    );
+                    resolve(position);
+                }
+            },
+            error => {
+                window.clearTimeout(timer);
+
+                if (watchId !== null) {
+                    navigator.geolocation.clearWatch(
+                        watchId
+                    );
+                }
+
+                reject(
+                    new Error(
+                        `Location failed: ${error.message}`
+                    )
+                );
+            },
+            {
+                enableHighAccuracy: true,
+                maximumAge: 0,
+                timeout: maximumWait
+            }
+        );
+    });
+}
+
+document
+    .querySelectorAll(".tab-button")
+    .forEach(button => {
+        button.addEventListener(
+            "click",
+            () => {
+                document
+                    .querySelectorAll(".tab-button")
+                    .forEach(item => {
+                        item.classList.remove("active");
+                    });
+
+                document
+                    .querySelectorAll(".input-panel")
+                    .forEach(panel => {
+                        panel.classList.remove("active");
+                    });
+
+                button.classList.add("active");
+
+                document.getElementById(
+                    button.dataset.panel
+                ).classList.add("active");
+            }
+        );
+    });
+
+document.getElementById(
+    "manualRouteButton"
+).addEventListener(
+    "click",
+    async () => {
+        const start = document.getElementById(
+            "manualStart"
+        ).value.trim();
+
+        const destination = document.getElementById(
+            "manualDestination"
+        ).value.trim();
+
+        if (!start || !destination) {
+            showMessage(
+                "Enter both Point A and Point B.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+            const result = await postJson(
+                "/api/route/manual",
+                {
+                    start,
+                    destination
+                }
+            );
+
+            renderManualRoute(result);
+
+        } catch (error) {
+            showMessage(
+                error.message,
+                "error"
+            );
+        }
+    }
+);
+
+document.getElementById(
+    "homeRouteButton"
+).addEventListener(
+    "click",
+    async () => {
+        const destination = document.getElementById(
+            "homeDestination"
+        ).value.trim();
+
+        if (!destination) {
+            showMessage(
+                "Enter Point B.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+            const result = await postJson(
+                "/api/route/compare/home",
+                {
+                    destination
+                }
+            );
+
+            renderComparison(
+                result,
+                "Saved home address"
+            );
+
+        } catch (error) {
+            showMessage(
+                error.message,
+                "error"
+            );
+        }
+    }
+);
+
+document.getElementById(
+    "currentRouteButton"
+).addEventListener(
+    "click",
+    async () => {
+        const destination = document.getElementById(
+            "currentDestination"
+        ).value.trim();
+
+        if (!destination) {
+            showMessage(
+                "Enter Point B.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+            showMessage(
+                "Waiting for the best browser location reading...",
+                "info"
+            );
+
+            const position =
+                await getAccurateCurrentPosition();
+
+            const accuracy =
+                position.coords.accuracy;
+
+            if (accuracy > 1000) {
+                showMessage(
+                    `The browser location is only accurate to ` +
+                    `about ${Math.round(accuracy)} meters. ` +
+                    `Use From Home for an accurate home origin.`,
+                    "error"
+                );
+            }
+
+            const result = await postJson(
+                "/api/route/compare/browser",
+                {
+                    latitude:
+                        position.coords.latitude,
+                    longitude:
+                        position.coords.longitude,
+                    destination
+                }
+            );
+
+            renderComparison(
+                result,
+                `Browser GPS ±${Math.round(
+                    accuracy
+                )} m`
+            );
+
+        } catch (error) {
+            showMessage(
+                error.message,
+                "error"
+            );
+        }
+    }
+);
+
+document
+    .querySelectorAll(".travel-mode-card")
+    .forEach(card => {
+        card.addEventListener(
+            "click",
+            () => {
+                displayComparisonRoute(
+                    card.dataset.mode
+                );
+            }
+        );
+    });
+
+document.getElementById(
+    "resetMapButton"
+).addEventListener(
+    "click",
+    () => {
+        clearMapLayers();
+        map.setView(
+            DEFAULT_CENTER,
+            DEFAULT_ZOOM
+        );
+    }
+);
+</script>
+</body>
+</html>

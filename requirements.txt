@@ -1,0 +1,16 @@
+PyYAML
+requests
+ollama
+numpy
+opencv-python
+pillow
+psutil
+rich
+fastapi
+uvicorn
+sounddevice
+SpeechRecognition
+python-dotenv
+sounddevice
+faster-whisper
+piper-tts

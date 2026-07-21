@@ -1,0 +1,5 @@
+faster-whisper
+webrtcvad
+piper-tts
+sounddevice
+python-dotenv

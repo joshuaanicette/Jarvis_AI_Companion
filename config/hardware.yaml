@@ -1,0 +1,23 @@
+raspberry_pi:
+  model: raspberry_pi_5
+
+camera:
+  type: usb_or_picamera
+  index: 0
+
+motors:
+  driver: l298n
+  enabled: false
+  left_forward_pin: 17
+  left_backward_pin: 27
+  right_forward_pin: 22
+  right_backward_pin: 23
+
+power:
+  battery_voltage: 7.4
+
+sensors:
+  ultrasonic:
+    enabled: false
+    trigger_pin: 5
+    echo_pin: 6
