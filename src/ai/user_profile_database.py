@@ -251,6 +251,28 @@ class UserProfileDatabase:
                 str(action.get("query", ""))
             )
 
+    def import_memories(
+        self,
+        memories: list[dict[str, Any]],
+    ) -> int:
+        """Copy existing JSON memories into the structured profile database."""
+        imported = 0
+        for memory in memories:
+            if not isinstance(memory, dict):
+                continue
+            note = str(memory.get("note", "")).strip()
+            if not note:
+                continue
+            self.save_fact(
+                note=note,
+                category=str(memory.get("category", "other")),
+                importance=float(memory.get("importance", 0.75)),
+                confidence=float(memory.get("confidence", 0.8)),
+                source=str(memory.get("source", "memory_import")),
+            )
+            imported += 1
+        return imported
+
     def forget_facts(self, query: str) -> int:
         normalized = self._normalize(query)
         if not normalized:
@@ -320,12 +342,30 @@ class UserProfileDatabase:
                         ),
                     )
 
-        for topic, score in interests.items():
-            self.reinforce_interest(
-                topic=topic,
-                strength=min(2.0, max(0.1, float(score))),
-                evidence="adaptive style profile",
-            )
+        with self._lock, self._connect() as connection:
+            for topic, score in interests.items():
+                cleaned = self._normalize(topic)
+                if not cleaned:
+                    continue
+                connection.execute(
+                    """
+                    INSERT INTO interests (
+                        topic, category, score, evidence_count,
+                        last_evidence, updated_at
+                    )
+                    VALUES (?, 'interest', ?, 1, ?, ?)
+                    ON CONFLICT(topic) DO UPDATE SET
+                        score = MAX(interests.score, excluded.score),
+                        last_evidence = excluded.last_evidence,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        cleaned,
+                        max(0.1, min(20.0, float(score))),
+                        "adaptive style profile",
+                        now,
+                    ),
+                )
 
     @staticmethod
     def _language_for(path: str) -> str:
@@ -433,6 +473,116 @@ class UserProfileDatabase:
                 )
                 """
             )
+
+    def forget_knowledge(self, query: str) -> int:
+        """Remove matching personal knowledge across profile tables."""
+        normalized = self._normalize(query)
+        if not normalized:
+            return 0
+
+        removed = self.forget_facts(normalized)
+        like_query = f"%{normalized}%"
+        with self._lock, self._connect() as connection:
+            for statement, parameters in (
+                (
+                    "DELETE FROM interests WHERE LOWER(topic) LIKE ?",
+                    (like_query,),
+                ),
+                (
+                    """
+                    DELETE FROM code_documents
+                    WHERE LOWER(path) LIKE ?
+                       OR LOWER(COALESCE(last_request, '')) LIKE ?
+                    """,
+                    (like_query, like_query),
+                ),
+                (
+                    "DELETE FROM code_requests WHERE LOWER(request) LIKE ?",
+                    (like_query,),
+                ),
+                (
+                    """
+                    DELETE FROM interaction_patterns
+                    WHERE LOWER(prompt_excerpt) LIKE ?
+                    """,
+                    (like_query,),
+                ),
+            ):
+                cursor = connection.execute(statement, parameters)
+                removed += int(cursor.rowcount)
+        return removed
+
+    def get_profile_summary(self) -> str:
+        """Return a readable, privacy-conscious view of saved learning."""
+        with self._lock, self._connect() as connection:
+            facts = connection.execute(
+                """
+                SELECT note, category
+                FROM profile_facts
+                WHERE active = 1
+                ORDER BY importance DESC, updated_at DESC
+                LIMIT 12
+                """
+            ).fetchall()
+            interests = connection.execute(
+                """
+                SELECT topic
+                FROM interests
+                ORDER BY score DESC, updated_at DESC
+                LIMIT 10
+                """
+            ).fetchall()
+            terms = connection.execute(
+                """
+                SELECT term, kind
+                FROM style_terms
+                ORDER BY count DESC, updated_at DESC
+                LIMIT 8
+                """
+            ).fetchall()
+            code_files = connection.execute(
+                """
+                SELECT path, language
+                FROM code_documents
+                ORDER BY updated_at DESC
+                LIMIT 8
+                """
+            ).fetchall()
+
+        lines = ["Here is what I currently have in your local profile:"]
+        if facts:
+            lines.append("Facts and preferences:")
+            lines.extend(
+                f"- [{row['category']}] {row['note']}"
+                for row in facts
+            )
+        if interests:
+            lines.append(
+                "Interests: "
+                + ", ".join(str(row["topic"]) for row in interests)
+                + "."
+            )
+        if terms:
+            lines.append(
+                "Tone and phrasing cues: "
+                + ", ".join(
+                    f"{row['term']} ({row['kind']})"
+                    for row in terms
+                )
+                + "."
+            )
+        if code_files:
+            lines.append("Learned code files:")
+            lines.extend(
+                f"- {row['path']} ({row['language']})"
+                for row in code_files
+            )
+        if len(lines) == 1:
+            lines.append("Nothing has been learned yet.")
+        lines.append(
+            "Say 'profile forget: <topic>' to remove matching saved knowledge."
+        )
+        return "\n".join(lines)
 
     def get_clothing_preferences(
         self,
