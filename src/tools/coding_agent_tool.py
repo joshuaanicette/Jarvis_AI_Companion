@@ -13,7 +13,7 @@ class CodingAgentTool(Tool):
     SUGGEST_PREFIXES = ("coding suggest:", "suggest feature:", "plan feature:")
     ADD_FILE_PREFIX = "coding add file:"
 
-    def __init__(self, coding_agent, llm, model: str = "qwen2.5:3b") -> None:
+    def __init__(self, coding_agent, llm, model: str = "qwen2.5:latest") -> None:
         self.coding_agent = coding_agent
         self.llm = llm
         self.model = model
@@ -86,7 +86,7 @@ class CodingAgentTool(Tool):
                 return (
                     "The local Qwen coding model took too long to analyze the "
                     "selected code. Try one smaller file at a time, shorten the "
-                    "request, or warm the model with 'ollama run qwen2.5:3b' "
+                    f"request, or warm the model with 'ollama run {self.model}' "
                     f"before trying again. Details: {error_text}"
                 )
             return f"Coding assistant could not complete that request: {error_text}"
