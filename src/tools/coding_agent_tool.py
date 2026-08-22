@@ -4,7 +4,9 @@ from src.tools.tool import Tool
 
 
 class CodingAgentTool(Tool):
-    name = "coding_agent"
+    @property
+    def name(self) -> str:
+        return "coding_agent"
 
     TASK_PREFIXES = ("coding task:", "code task:", "propose code change:")
     ANALYZE_PREFIXES = ("coding analyze:", "analyze code:", "decipher code:")
@@ -29,7 +31,7 @@ class CodingAgentTool(Tool):
             ))
         )
 
-    def run(self, text: str) -> str:
+    def execute(self, text: str = "") -> str:
         try:
             approved = self.coding_agent.approve_from_text(text)
             if approved:
@@ -82,3 +84,7 @@ class CodingAgentTool(Tool):
             return f"Coding assistant could not complete that request: {error}"
 
         return "Say 'coding help' to see the available coding commands."
+
+    def run(self, text: str = "") -> str:
+        """Compatibility alias used by ToolRouter."""
+        return self.execute(text)
