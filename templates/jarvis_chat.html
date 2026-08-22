@@ -167,9 +167,24 @@
 
             <footer class="composer-area">
                 <form id="chatForm" class="composer">
-                    <textarea id="messageInput" rows="1" maxlength="8000" placeholder="Message Jarvis" aria-label="Message Jarvis"></textarea>
+                    <div id="attachmentTray" class="attachment-tray hidden" aria-live="polite"></div>
+
+                    <input id="codeFileInput" class="hidden" type="file" multiple
+                        accept=".py,.js,.ts,.tsx,.jsx,.json,.yaml,.yml,.toml,.md,.html,.css,.sh,.txt">
+                    <input id="codeFolderInput" class="hidden" type="file" multiple webkitdirectory directory
+                        accept=".py,.js,.ts,.tsx,.jsx,.json,.yaml,.yml,.toml,.md,.html,.css,.sh,.txt">
+
+                    <textarea id="messageInput" rows="1" maxlength="8000" placeholder="Message Jarvis or attach code to analyze and change" aria-label="Message Jarvis"></textarea>
 
                     <div class="composer-toolbar">
+                        <button id="attachCodeButton" class="composer-button" type="button" aria-label="Attach code files" title="Attach code files">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 6.5-6.5a3 3 0 0 1 4.2 4.2L10 18.4a5 5 0 0 1-7.1-7.1l8.2-8.2"/><path d="m6 14 8.5-8.5"/></svg>
+                        </button>
+
+                        <button id="attachFolderButton" class="composer-button" type="button" aria-label="Attach a code folder" title="Attach code folder">
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h7l2 2h9v10H3Z"/></svg>
+                        </button>
+
                         <button id="cameraComposerButton" class="composer-button" type="button" aria-label="Open camera" title="Open vision">
                             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6 13 4h-2L9.5 6H5a2 2 0 0 0-2 2v10h18V8a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/></svg>
                         </button>
