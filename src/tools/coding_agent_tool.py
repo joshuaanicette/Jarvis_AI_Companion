@@ -81,7 +81,15 @@ class CodingAgentTool(Tool):
         except (KeyError, ValueError) as error:
             return f"Coding request needs adjustment: {error}"
         except Exception as error:
-            return f"Coding assistant could not complete that request: {error}"
+            error_text = str(error)
+            if "timed out" in error_text.casefold() or "read timeout" in error_text.casefold():
+                return (
+                    "The local Qwen coding model took too long to analyze the "
+                    "selected code. Try one smaller file at a time, shorten the "
+                    "request, or warm the model with 'ollama run qwen2.5:3b' "
+                    f"before trying again. Details: {error_text}"
+                )
+            return f"Coding assistant could not complete that request: {error_text}"
 
         return "Say 'coding help' to see the available coding commands."
 
