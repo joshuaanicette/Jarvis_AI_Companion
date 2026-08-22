@@ -4,6 +4,9 @@ from src.ai.coding_agent import CodingAgent
 from src.ai.user_profile_database import (
     UserProfileDatabase,
 )
+from src.tools.user_profile_tool import (
+    UserProfileTool,
+)
 from src.weather.clothing_advisor import (
     ClothingAdvisor,
 )
@@ -170,3 +173,61 @@ def test_coding_agent_saves_code_context(
     counts = database.counts()
     assert counts["code_documents"] == 1
     assert counts["code_requests"] == 1
+
+
+def test_existing_memories_are_imported_without_score_inflation(
+    tmp_path: Path,
+):
+    database = UserProfileDatabase(
+        tmp_path / "profile.db"
+    )
+    memories = [
+        {
+            "note": "Josh likes embedded systems.",
+            "category": "interest",
+            "importance": 0.9,
+            "confidence": 0.8,
+            "source": "question_pattern",
+        }
+    ]
+
+    assert database.import_memories(memories) == 1
+    assert database.import_memories(memories) == 1
+    assert database.counts()["profile_facts"] == 1
+
+    snapshot = {
+        "samples": 2,
+        "signals": {},
+        "slang": {},
+        "phrases": {},
+        "interests": {
+            "robotics": 1.5,
+        },
+    }
+    database.save_style_snapshot(snapshot)
+    database.save_style_snapshot(snapshot)
+    assert database.counts()["interests"] == 1
+
+
+def test_profile_tool_can_show_and_forget_learning(
+    tmp_path: Path,
+):
+    database = UserProfileDatabase(
+        tmp_path / "profile.db"
+    )
+    database.save_fact(
+        "Josh is interested in robotics.",
+        category="interest",
+    )
+    tool = UserProfileTool(database)
+
+    status = tool.execute(
+        "what do you know about me"
+    )
+    assert "robotics" in status
+
+    response = tool.execute(
+        "profile forget: robotics"
+    )
+    assert "removed 1" in response
+    assert "robotics" not in database.get_profile_summary()
