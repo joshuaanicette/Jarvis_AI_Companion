@@ -422,6 +422,71 @@ class UserProfileDatabase:
                 ),
             )
 
+    def get_code_context(
+        self,
+        query: str,
+        max_documents: int = 4,
+        max_chars: int = 8_000,
+    ) -> str:
+        """Retrieve bounded code previously selected by the user."""
+        normalized_query = self._normalize(query)
+        stop_words = {
+            "about", "add", "and", "change", "code", "could", "file",
+            "for", "from", "help", "how", "into", "make", "project",
+            "should", "that", "the", "this", "update", "want", "with",
+        }
+        tokens = {
+            token
+            for token in re.findall(r"[a-z0-9_]+", normalized_query)
+            if len(token) >= 3 and token not in stop_words
+        }
+
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT path, language, content, last_request, updated_at
+                FROM code_documents
+                ORDER BY updated_at DESC
+                LIMIT 40
+                """
+            ).fetchall()
+
+        ranked: list[tuple[int, sqlite3.Row]] = []
+        for position, row in enumerate(rows):
+            searchable = self._normalize(
+                f"{row['path']} {row['last_request'] or ''}"
+            )
+            score = sum(
+                3 if token in self._normalize(row["path"]) else 1
+                for token in tokens
+                if token in searchable
+            )
+            if score or (not tokens and position < 2):
+                ranked.append((score, row))
+
+        if not ranked:
+            return ""
+
+        ranked.sort(
+            key=lambda item: item[0],
+            reverse=True,
+        )
+        sections: list[str] = []
+        used_chars = 0
+        for _, row in ranked[:max(1, int(max_documents))]:
+            header = (
+                f"FILE: {row['path']} "
+                f"({row['language']}, previously selected)\n---\n"
+            )
+            remaining = max(0, int(max_chars) - used_chars - len(header) - 5)
+            if remaining <= 0:
+                break
+            content = str(row["content"])[:remaining]
+            sections.append(f"{header}{content}\n---")
+            used_chars += len(sections[-1])
+
+        return "\n\n".join(sections)
+
     def record_code_request(
         self,
         mode: str,
