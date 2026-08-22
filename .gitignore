@@ -8,6 +8,7 @@ __pycache__/
 logs/*.log
 data/memory/*.json
 data/coding/*.json
+data/coding/uploads/
 data/conversations/*
 data/sensor_logs/*
 models/**/*.onnx
