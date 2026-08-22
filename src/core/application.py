@@ -288,7 +288,9 @@ class Application:
 
         self.tools.register(
             CodingAgentTool(
-                self.coding_agent
+                coding_agent=self.coding_agent,
+                llm=self.llm,
+                model="qwen2.5:3b",
             )
         )
 
