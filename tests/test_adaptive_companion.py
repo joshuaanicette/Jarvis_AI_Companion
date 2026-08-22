@@ -4,6 +4,7 @@ import pytest
 
 from src.ai.coding_agent import ApprovalRequiredError, CodingAgent
 from src.ai.user_style import UserStyleManager
+from src.tools.coding_agent_tool import CodingAgentTool
 
 
 class FakeLLM:
@@ -53,3 +54,12 @@ def test_coding_agent_stages_a_new_file_from_prompt(tmp_path: Path):
     )
     assert proposal.changes[0].path == "src/helper.py"
     assert not (tmp_path / "src/helper.py").exists()
+
+
+def test_coding_agent_tool_implements_abstract_execute(tmp_path: Path):
+    agent = CodingAgent(tmp_path, tmp_path / "proposals.json")
+    tool = CodingAgentTool(agent, FakeLLM("{}"))
+
+    assert tool.name == "coding_agent"
+    assert "Coding commands" in tool.execute("coding help")
+    assert tool.run("coding help") == tool.execute("coding help")
