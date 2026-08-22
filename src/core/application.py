@@ -8,6 +8,9 @@ from src.ai.memory_retriever import MemoryRetriever
 from src.ai.model_router import ModelRouter
 from src.ai.ollama_llm import OllamaLLM
 from src.ai.subject_router import SubjectRouter
+from src.ai.user_profile_database import (
+    UserProfileDatabase,
+)
 from src.ai.user_style import UserStyleManager
 
 from src.automation.productivity_manager import (
@@ -125,6 +128,16 @@ class Application:
             reasoning_model="qwen2.5:3b",
         )
 
+        # Local personal knowledge database
+        self.profile_database = (
+            UserProfileDatabase(
+                path=(
+                    "data/profile/"
+                    "jarvis_profile.db"
+                )
+            )
+        )
+
         # Memory
         self.memory = MemoryManager(
             memory_path=(
@@ -144,6 +157,9 @@ class Application:
 
         self.user_style = UserStyleManager(
             path="data/memory/user_style.json",
+            profile_database=(
+                self.profile_database
+            ),
         )
 
         coding_config = self.config.get(
@@ -161,6 +177,9 @@ class Application:
             max_total_source_chars=coding_config.get(
                 "max_total_source_chars",
                 24_000,
+            ),
+            profile_database=(
+                self.profile_database
             ),
         )
 
@@ -251,7 +270,11 @@ class Application:
         # Weather
         self.weather_tool = WeatherTool()
         self.clothing_advisor = (
-            ClothingAdvisor()
+            ClothingAdvisor(
+                profile_database=(
+                    self.profile_database
+                )
+            )
         )
 
         self.weather_dashboard = (
