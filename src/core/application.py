@@ -49,6 +49,9 @@ from src.tools.system_health_tool import (
     SystemHealthTool,
 )
 from src.tools.time_tool import TimeTool
+from src.tools.user_profile_tool import (
+    UserProfileTool,
+)
 from src.tools.vision_tool import VisionTool
 from src.tools.weather_tool import WeatherTool
 
@@ -143,6 +146,11 @@ class Application:
             memory_path=(
                 "data/memory/memory.json"
             ),
+        )
+
+        # Preserve knowledge learned by earlier Jarvis versions.
+        self.profile_database.import_memories(
+            self.memory.get_all_memories()
         )
 
         self.memory_analyzer = MemoryAnalyzer(
@@ -320,6 +328,13 @@ class Application:
 
         self.tools.register(
             SystemHealthTool()
+        )
+
+        self.tools.register(
+            UserProfileTool(
+                profile_database=self.profile_database,
+                memory_manager=self.memory,
+            )
         )
 
         self.tools.register(
