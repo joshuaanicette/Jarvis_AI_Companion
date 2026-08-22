@@ -18,11 +18,17 @@ class UserStyleManager:
     HUMOR_MARKERS = {"lol", "lmao", "😂", "😭", "joke", "funny"}
     FORMAL_MARKERS = {"please", "therefore", "however", "could you", "would you"}
 
-    def __init__(self, path: str | Path = "data/memory/user_style.json") -> None:
+    def __init__(
+        self,
+        path: str | Path = "data/memory/user_style.json",
+        profile_database=None,
+    ) -> None:
         self.path = Path(path)
+        self.profile_database = profile_database
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.RLock()
         self._data = self._load()
+        self._sync_database()
 
     @staticmethod
     def _default() -> dict[str, Any]:
@@ -102,6 +108,7 @@ class UserStyleManager:
             self._data["samples"] = int(self._data.get("samples", 0)) + 1
             self._trim()
             self._save()
+            self._sync_database()
 
     def reinforce_interest(self, topic: str, strength: float = 1.0) -> None:
         key = re.sub(r"\s+", " ", str(topic).casefold()).strip()
@@ -112,6 +119,7 @@ class UserStyleManager:
             self._data["interests"][key] = round(min(20.0, current + max(0.1, strength)), 2)
             self._trim()
             self._save()
+            self._sync_database()
 
     def _trim(self) -> None:
         for key, limit in (("slang", 30), ("phrases", 20), ("interests", 40)):
@@ -149,6 +157,17 @@ class UserStyleManager:
             "repeat typos, or sacrifice technical accuracy."
         )
         return "\n".join(instructions)
+
+    def _sync_database(self) -> None:
+        if self.profile_database is None:
+            return
+        try:
+            self.profile_database.save_style_snapshot(
+                self.snapshot()
+            )
+        except Exception:
+            # Personalization should never prevent Jarvis from responding.
+            return
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
