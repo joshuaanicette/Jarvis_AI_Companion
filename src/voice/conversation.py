@@ -113,6 +113,14 @@ class ConversationManager:
             "Processing conversation request"
         )
 
+        try:
+            self.app.user_style.observe(text)
+        except Exception as error:
+            logger.warning(
+                "Could not update user style: %s",
+                error,
+            )
+
         tool_response = (
             self.app.tool_router.check_tools(
                 text
@@ -235,6 +243,23 @@ class ConversationManager:
                 {
                     "role": "system",
                     "content": memory_context,
+                }
+            )
+
+        try:
+            style_context = self.app.user_style.get_prompt_context()
+        except Exception as error:
+            logger.warning(
+                "Could not load adaptive style context: %s",
+                error,
+            )
+            style_context = ""
+
+        if style_context:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": style_context,
                 }
             )
 
