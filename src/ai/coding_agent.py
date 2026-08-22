@@ -7,7 +7,6 @@ import re
 import secrets
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
 
 
 @dataclass(slots=True)
@@ -31,13 +30,14 @@ class ApprovalRequiredError(RuntimeError):
 
 
 class CodingAgent:
-    """Stages code edits and applies them only after explicit user approval."""
+    """Inspects code, recommends changes, and applies only approved proposals."""
 
     BLOCKED_PARTS = {".git", ".env", "__pycache__", ".ssh", "secrets"}
     ALLOWED_SUFFIXES = {
         ".py", ".js", ".ts", ".tsx", ".jsx", ".json", ".yaml", ".yml",
         ".toml", ".md", ".html", ".css", ".sh", ".txt",
     }
+    MAX_FILE_CHARS = 30_000
 
     def __init__(
         self,
@@ -62,9 +62,17 @@ class CodingAgent:
             raise ValueError(f"Unsupported file type: {candidate.suffix}")
         return candidate
 
+    @classmethod
+    def _paths_from_text(cls, text: str) -> set[str]:
+        return set(
+            re.findall(
+                r"(?:^|\s)([A-Za-z0-9_./-]+\.(?:py|js|ts|tsx|jsx|json|ya?ml|toml|md|html|css|sh|txt))",
+                str(text),
+            )
+        )
+
     def read_file(self, relative_path: str) -> str:
-        path = self._resolve(relative_path)
-        return path.read_text(encoding="utf-8")
+        return self._resolve(relative_path).read_text(encoding="utf-8")
 
     def list_files(self, limit: int = 200) -> list[str]:
         files: list[str] = []
@@ -76,6 +84,64 @@ class CodingAgent:
             if len(files) >= limit:
                 break
         return sorted(files)
+
+    def _sources_for(self, paths: set[str], allow_missing: bool) -> list[str]:
+        sources: list[str] = []
+        for relative_path in sorted(paths):
+            path = self._resolve(relative_path)
+            if not path.exists() and not allow_missing:
+                raise ValueError(f"File not found: {relative_path}")
+            content = path.read_text(encoding="utf-8") if path.exists() else ""
+            if len(content) > self.MAX_FILE_CHARS:
+                raise ValueError(f"{relative_path} is too large for a safe local request.")
+            sources.append(f"FILE: {relative_path}\n\`\`\`\n{content}\n\`\`\`")
+        return sources
+
+    @staticmethod
+    def _generate(llm, prompt: str, model: str) -> str:
+        return str(llm.generate(prompt=prompt, model=model)).strip()
+
+    def analyze_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
+        """Explain named files and relate them to the requested functionality."""
+        paths = self._paths_from_text(request)
+        if not paths:
+            raise ValueError("Name the file or files Jarvis should analyze.")
+        sources = self._sources_for(paths, allow_missing=False)
+        prompt = f"""
+You are Jarvis's local code analyst. Explain the supplied code accurately.
+Do not claim that code was changed or tests were run.
+
+The user wants this functionality:
+{request}
+
+For each file, explain its role, main control flow, inputs/outputs, dependencies,
+risks or likely bugs, and whether it supports the requested functionality.
+Then recommend the smallest practical next implementation steps. Be specific
+about which files should change or be added.
+
+SOURCE FILES:
+{chr(10).join(sources)}
+""".strip()
+        return self._generate(llm, prompt, model)
+
+    def suggest_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
+        """Suggest a feature design without reading or altering source contents."""
+        project_index = "\n".join(f"- {path}" for path in self.list_files(limit=160))
+        prompt = f"""
+You are Jarvis's local software architect. The user wants this functionality:
+{request}
+
+Based only on this project file index, recommend a practical feature design.
+State: likely files to inspect first, new files that may be useful, data flow,
+tools or dependencies, security/safety considerations, and an incremental
+implementation plan. If the existing index is insufficient, name the exact
+files the user should ask Jarvis to analyze next. Do not claim that you read
+source code, changed files, or ran tests.
+
+PROJECT FILE INDEX:
+{project_index}
+""".strip()
+        return self._generate(llm, prompt, model)
 
     def propose(self, summary: str, replacements: dict[str, str]) -> ChangeProposal:
         changes: list[FileChange] = []
@@ -96,36 +162,23 @@ class CodingAgent:
         return proposal
 
     def propose_from_prompt(self, task: str, llm, model: str = "qwen2.5:3b") -> ChangeProposal:
-        """Ask the reasoning model for complete replacement files, then stage a diff."""
-        mentioned = set(
-            re.findall(
-                r"(?:^|\s)([A-Za-z0-9_./-]+\.(?:py|js|ts|tsx|jsx|json|ya?ml|toml|md|html|css|sh|txt))",
-                str(task),
-            )
-        )
+        """Generate a complete-file proposal; existing files remain unchanged until approved."""
+        mentioned = self._paths_from_text(task)
         if not mentioned:
-            raise ValueError(
-                "Name at least one project file in the coding task so Jarvis knows what to inspect."
-            )
-        sources: list[str] = []
-        for relative_path in sorted(mentioned):
-            path = self._resolve(relative_path)
-            content = path.read_text(encoding="utf-8") if path.exists() else ""
-            if len(content) > 30_000:
-                raise ValueError(f"{relative_path} is too large for a safe local proposal.")
-            sources.append(f"FILE: {relative_path}\n```\n{content}\n```")
-
+            raise ValueError("Name each project file that may be created or changed.")
+        sources = self._sources_for(mentioned, allow_missing=True)
         prompt = f"""
-You are Jarvis's local coding planner. Prepare a proposed change, but do not
-claim that files were edited or tests were run. Return JSON only:
+You are Jarvis's local coding planner. Prepare a proposed change but do not
+claim files were edited or tests were run. Return JSON only:
 {{
   "summary": "short description",
   "changes": [
     {{"path": "relative/project/file.py", "content": "complete replacement file"}}
   ]
 }}
-Every changed file must be one explicitly included below. Preserve unrelated
-behavior and return the complete replacement content, never a partial snippet.
+Every changed file must be explicitly included below. A missing file may be
+created. Preserve unrelated behavior and return complete replacement content,
+never partial snippets.
 
 TASK:
 {task}
@@ -133,8 +186,8 @@ TASK:
 CURRENT FILES:
 {chr(10).join(sources)}
 """.strip()
-        raw = llm.generate(prompt=prompt, model=model)
-        match = re.search(r"\{.*\}", str(raw), flags=re.DOTALL)
+        raw = self._generate(llm, prompt, model)
+        match = re.search(r"\{.*\}", raw, flags=re.DOTALL)
         if not match:
             raise ValueError("The coding model did not return a JSON proposal.")
         payload = json.loads(match.group(0))
@@ -144,10 +197,14 @@ CURRENT FILES:
             if path not in mentioned:
                 raise ValueError(f"The model attempted an unrequested file: {path}")
             replacements[path] = str(item.get("content", ""))
-        return self.propose(
-            summary=str(payload.get("summary", task)),
-            replacements=replacements,
-        )
+        return self.propose(str(payload.get("summary", task)), replacements)
+
+    def propose_new_file(self, path: str, description: str, llm, model: str = "qwen2.5:3b") -> ChangeProposal:
+        destination = self._resolve(path)
+        if destination.exists():
+            raise ValueError(f"{path} already exists; use a coding task to modify it.")
+        task = f"Create new file {path}. Required functionality: {description}"
+        return self.propose_from_prompt(task, llm, model)
 
     def preview(self, proposal_id: str) -> str:
         proposal = self._require(proposal_id)
@@ -161,9 +218,7 @@ CURRENT FILES:
                 lineterm="",
             )
             sections.append("\n".join(diff))
-        sections.append(
-            f'To apply, explicitly say: approve coding proposal {proposal.proposal_id}'
-        )
+        sections.append(f"To apply, explicitly say: approve coding proposal {proposal.proposal_id}")
         return "\n\n".join(sections)
 
     def approve_from_text(self, text: str) -> str | None:
@@ -183,9 +238,7 @@ CURRENT FILES:
         if proposal.applied:
             return
         if not approved:
-            raise ApprovalRequiredError(
-                f"Proposal {proposal_id} has not received explicit approval."
-            )
+            raise ApprovalRequiredError(f"Proposal {proposal_id} has not received explicit approval.")
 
         staged: list[tuple[Path, Path]] = []
         try:
