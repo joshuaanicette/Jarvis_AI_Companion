@@ -43,10 +43,20 @@ class CodingAgent:
         self,
         workspace: str | Path = ".",
         proposal_path: str | Path = "data/coding/proposals.json",
+        request_timeout_seconds: float = 600.0,
+        max_total_source_chars: int = 24_000,
     ) -> None:
         self.workspace = Path(workspace).resolve()
         self.proposal_path = Path(proposal_path)
         self.proposal_path.parent.mkdir(parents=True, exist_ok=True)
+        self.request_timeout_seconds = max(
+            30.0,
+            float(request_timeout_seconds),
+        )
+        self.max_total_source_chars = max(
+            4_000,
+            int(max_total_source_chars),
+        )
         self._proposals: dict[str, ChangeProposal] = {}
         self._load()
 
@@ -87,6 +97,7 @@ class CodingAgent:
 
     def _sources_for(self, paths: set[str], allow_missing: bool) -> list[str]:
         sources: list[str] = []
+        total_chars = 0
         for relative_path in sorted(paths):
             path = self._resolve(relative_path)
             if not path.exists() and not allow_missing:
@@ -94,12 +105,35 @@ class CodingAgent:
             content = path.read_text(encoding="utf-8") if path.exists() else ""
             if len(content) > self.MAX_FILE_CHARS:
                 raise ValueError(f"{relative_path} is too large for a safe local request.")
+
+            total_chars += len(content)
+            if total_chars > self.max_total_source_chars:
+                raise ValueError(
+                    "The selected source contains "
+                    f"{total_chars:,} characters, above the local coding limit "
+                    f"of {self.max_total_source_chars:,}. Select fewer or smaller "
+                    "files so the Raspberry Pi model can finish reliably."
+                )
+
             sources.append(f"FILE: {relative_path}\n---\n{content}\n---")
         return sources
 
-    @staticmethod
-    def _generate(llm, prompt: str, model: str) -> str:
-        return str(llm.generate(prompt=prompt, model=model)).strip()
+    def _generate(self, llm, prompt: str, model: str) -> str:
+        try:
+            result = llm.generate(
+                prompt=prompt,
+                model=model,
+                timeout=self.request_timeout_seconds,
+            )
+        except TypeError as error:
+            if "timeout" not in str(error):
+                raise
+            result = llm.generate(
+                prompt=prompt,
+                model=model,
+            )
+
+        return str(result).strip()
 
     def analyze_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
         """Explain named files and relate them to the requested functionality."""
