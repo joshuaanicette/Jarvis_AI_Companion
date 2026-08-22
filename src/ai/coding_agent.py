@@ -94,7 +94,7 @@ class CodingAgent:
             content = path.read_text(encoding="utf-8") if path.exists() else ""
             if len(content) > self.MAX_FILE_CHARS:
                 raise ValueError(f"{relative_path} is too large for a safe local request.")
-            sources.append(f"FILE: {relative_path}\n\`\`\`\n{content}\n\`\`\`")
+            sources.append(f"FILE: {relative_path}\n---\n{content}\n---")
         return sources
 
     @staticmethod
