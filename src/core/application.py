@@ -146,9 +146,22 @@ class Application:
             path="data/memory/user_style.json",
         )
 
+        coding_config = self.config.get(
+            "coding",
+            {},
+        )
+
         self.coding_agent = CodingAgent(
             workspace=".",
             proposal_path="data/coding/proposals.json",
+            request_timeout_seconds=coding_config.get(
+                "timeout_seconds",
+                600,
+            ),
+            max_total_source_chars=coding_config.get(
+                "max_total_source_chars",
+                24_000,
+            ),
         )
 
         self.subject_router = SubjectRouter()
