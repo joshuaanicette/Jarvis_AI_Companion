@@ -8,6 +8,10 @@ llm:
   host: http://localhost:11434
   model: gemma3:1b
 
+coding:
+  timeout_seconds: 600
+  max_total_source_chars: 24000
+
 memory:
   enabled: true
   importance_threshold: 0.80
