@@ -231,3 +231,47 @@ def test_profile_tool_can_show_and_forget_learning(
     )
     assert "removed 1" in response
     assert "robotics" not in database.get_profile_summary()
+
+
+
+class CapturingLLM:
+    def __init__(self):
+        self.prompt = ""
+
+    def generate(
+        self,
+        prompt: str,
+        model: str,
+        timeout: float | None = None,
+    ) -> str:
+        self.prompt = prompt
+        return "Use the existing service module."
+
+
+def test_coding_suggestions_retrieve_matching_saved_code(
+    tmp_path: Path,
+):
+    database = UserProfileDatabase(
+        tmp_path / "profile.db"
+    )
+    database.store_code_document(
+        "src/auth_service.py",
+        "AUTH_TIMEOUT = 30\n",
+        request="Add authentication timeout handling",
+    )
+    agent = CodingAgent(
+        workspace=tmp_path,
+        proposal_path=tmp_path / "proposals.json",
+        profile_database=database,
+    )
+    llm = CapturingLLM()
+
+    response = agent.suggest_from_prompt(
+        "Improve authentication timeout behavior",
+        llm,
+    )
+
+    assert "existing service" in response
+    assert "src/auth_service.py" in llm.prompt
+    assert "AUTH_TIMEOUT = 30" in llm.prompt
+    assert "may be stale" in llm.prompt
