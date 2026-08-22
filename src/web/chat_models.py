@@ -11,10 +11,7 @@ class ChatRequest(BaseModel):
         max_length=100,
     )
     voice_enabled: bool = True
-    attachments: list[str] = Field(
-        default_factory=list,
-        max_length=30,
-    )
+    attachments: list[str] = Field(default_factory=list)
 
 
 class ChatAction(BaseModel):
