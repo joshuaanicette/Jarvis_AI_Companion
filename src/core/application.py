@@ -1,12 +1,17 @@
 import threading
 import time
 
+from src.ai.coding_agent import CodingAgent
 from src.ai.memory import MemoryManager
 from src.ai.memory_analyzer import MemoryAnalyzer
 from src.ai.memory_retriever import MemoryRetriever
 from src.ai.model_router import ModelRouter
 from src.ai.ollama_llm import OllamaLLM
 from src.ai.subject_router import SubjectRouter
+from src.ai.user_profile_database import (
+    UserProfileDatabase,
+)
+from src.ai.user_style import UserStyleManager
 
 from src.automation.productivity_manager import (
     ProductivityManager,
@@ -31,6 +36,7 @@ from src.robotics.mock_motor_controller import (
 )
 from src.robotics.robot import Robot
 
+from src.tools.coding_agent_tool import CodingAgentTool
 from src.tools.navigation_tool import (
     NavigationTool,
 )
@@ -43,6 +49,9 @@ from src.tools.system_health_tool import (
     SystemHealthTool,
 )
 from src.tools.time_tool import TimeTool
+from src.tools.user_profile_tool import (
+    UserProfileTool,
+)
 from src.tools.vision_tool import VisionTool
 from src.tools.weather_tool import WeatherTool
 
@@ -117,9 +126,27 @@ class Application:
             ),
         )
 
+        self.reasoning_model = llm_config.get(
+            "reasoning_model",
+            "qwen2.5:latest",
+        )
+
         self.model_router = ModelRouter(
-            fast_model="gemma3:1b",
-            reasoning_model="qwen2.5:3b",
+            fast_model=llm_config.get(
+                "model",
+                "gemma3:1b",
+            ),
+            reasoning_model=self.reasoning_model,
+        )
+
+        # Local personal knowledge database
+        self.profile_database = (
+            UserProfileDatabase(
+                path=(
+                    "data/profile/"
+                    "jarvis_profile.db"
+                )
+            )
         )
 
         # Memory
@@ -127,6 +154,11 @@ class Application:
             memory_path=(
                 "data/memory/memory.json"
             ),
+        )
+
+        # Preserve knowledge learned by earlier Jarvis versions.
+        self.profile_database.import_memories(
+            self.memory.get_all_memories()
         )
 
         self.memory_analyzer = MemoryAnalyzer(
@@ -137,6 +169,34 @@ class Application:
         self.memory_retriever = MemoryRetriever(
             memory_manager=self.memory,
             max_results=8,
+        )
+
+        self.user_style = UserStyleManager(
+            path="data/memory/user_style.json",
+            profile_database=(
+                self.profile_database
+            ),
+        )
+
+        coding_config = self.config.get(
+            "coding",
+            {},
+        )
+
+        self.coding_agent = CodingAgent(
+            workspace=".",
+            proposal_path="data/coding/proposals.json",
+            request_timeout_seconds=coding_config.get(
+                "timeout_seconds",
+                600,
+            ),
+            max_total_source_chars=coding_config.get(
+                "max_total_source_chars",
+                24_000,
+            ),
+            profile_database=(
+                self.profile_database
+            ),
         )
 
         self.subject_router = SubjectRouter()
@@ -226,7 +286,11 @@ class Application:
         # Weather
         self.weather_tool = WeatherTool()
         self.clothing_advisor = (
-            ClothingAdvisor()
+            ClothingAdvisor(
+                profile_database=(
+                    self.profile_database
+                )
+            )
         )
 
         self.weather_dashboard = (
@@ -272,6 +336,21 @@ class Application:
 
         self.tools.register(
             SystemHealthTool()
+        )
+
+        self.tools.register(
+            UserProfileTool(
+                profile_database=self.profile_database,
+                memory_manager=self.memory,
+            )
+        )
+
+        self.tools.register(
+            CodingAgentTool(
+                coding_agent=self.coding_agent,
+                llm=self.llm,
+                model=self.reasoning_model,
+            )
         )
 
         self.tools.register(

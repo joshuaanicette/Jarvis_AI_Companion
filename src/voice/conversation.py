@@ -113,6 +113,14 @@ class ConversationManager:
             "Processing conversation request"
         )
 
+        try:
+            self.app.user_style.observe(text)
+        except Exception as error:
+            logger.warning(
+                "Could not update user style: %s",
+                error,
+            )
+
         tool_response = (
             self.app.tool_router.check_tools(
                 text
@@ -120,6 +128,10 @@ class ConversationManager:
         )
 
         if tool_response is not None:
+            self._record_profile_interaction(
+                category="tool",
+                prompt=text,
+            )
             self._analyze_memory_safely(
                 user_text=text,
                 allow_interest_inference=False,
@@ -135,6 +147,10 @@ class ConversationManager:
 
         category = self._classify_subject(
             text
+        )
+        self._record_profile_interaction(
+            category=category,
+            prompt=text,
         )
 
         model_decision = self._select_model(
@@ -235,6 +251,45 @@ class ConversationManager:
                 {
                     "role": "system",
                     "content": memory_context,
+                }
+            )
+
+        try:
+            style_context = self.app.user_style.get_prompt_context()
+        except Exception as error:
+            logger.warning(
+                "Could not load adaptive style context: %s",
+                error,
+            )
+            style_context = ""
+
+        if style_context:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": style_context,
+                }
+            )
+
+        try:
+            profile_context = (
+                self.app.profile_database
+                .get_prompt_context(
+                    query=user_text
+                )
+            )
+        except Exception as error:
+            logger.warning(
+                "Could not load personal profile context: %s",
+                error,
+            )
+            profile_context = ""
+
+        if profile_context:
+            messages.append(
+                {
+                    "role": "system",
+                    "content": profile_context,
                 }
             )
 
@@ -521,6 +576,17 @@ class ConversationManager:
             ):
                 return
 
+            try:
+                self.app.profile_database.record_memory_action(
+                    action=action,
+                    source_text=user_text,
+                )
+            except Exception as error:
+                logger.warning(
+                    "Could not update personal profile database: %s",
+                    error,
+                )
+
             self._apply_memory_action(
                 action=action,
                 source_text=user_text,
@@ -649,6 +715,22 @@ class ConversationManager:
             logger.info(
                 "Removed %s matching memories",
                 removed,
+            )
+
+    def _record_profile_interaction(
+        self,
+        category: str,
+        prompt: str,
+    ) -> None:
+        try:
+            self.app.profile_database.record_interaction(
+                category=category,
+                prompt=prompt,
+            )
+        except Exception as error:
+            logger.warning(
+                "Could not record interaction pattern: %s",
+                error,
             )
 
     def _append_history(

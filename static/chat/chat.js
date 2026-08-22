@@ -15,6 +15,11 @@ const elements = {
     voiceToggle: $("voiceToggle"),
     microphoneButton: $("microphoneButton"),
     cameraComposerButton: $("cameraComposerButton"),
+    attachCodeButton: $("attachCodeButton"),
+    attachFolderButton: $("attachFolderButton"),
+    codeFileInput: $("codeFileInput"),
+    codeFolderInput: $("codeFolderInput"),
+    attachmentTray: $("attachmentTray"),
     characterCount: $("characterCount"),
     connectionText: $("connectionText"),
     modelStatusText: $("modelStatusText"),
@@ -55,6 +60,7 @@ let conversations = [];
 let microphoneAvailable = false;
 let cameraAvailable = false;
 let selectedHistoryItem = null;
+let pendingAttachments = [];
 
 const processingStages = [
     "Understanding your request…",
@@ -218,6 +224,100 @@ async function api(url, options = {}) {
     return payload;
 }
 
+function renderAttachments() {
+    elements.attachmentTray.innerHTML = "";
+    elements.attachmentTray.classList.toggle(
+        "hidden",
+        pendingAttachments.length === 0
+    );
+
+    pendingAttachments.forEach((attachment, index) => {
+        const chip = document.createElement("div");
+        chip.className = "attachment-chip";
+
+        const label = document.createElement("span");
+        label.className = "attachment-name";
+        label.textContent = attachment.relative_name || attachment.name;
+        label.title = attachment.path;
+
+        const download = document.createElement("a");
+        download.className = "attachment-download";
+        download.href = attachment.download_url;
+        download.textContent = "Download";
+        download.title = "Download the current Jarvis workspace copy";
+
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "attachment-remove";
+        remove.textContent = "×";
+        remove.setAttribute("aria-label", `Detach ${attachment.name}`);
+        remove.addEventListener("click", () => {
+            pendingAttachments.splice(index, 1);
+            renderAttachments();
+        });
+
+        chip.append(label, download, remove);
+        elements.attachmentTray.appendChild(chip);
+    });
+}
+
+async function uploadCodeFiles(fileList) {
+    const selected = Array.from(fileList || []);
+    if (!selected.length) {
+        return;
+    }
+
+    if (!conversationId) {
+        conversationId = makeId();
+    }
+
+    const formData = new FormData();
+    formData.append("conversation_id", conversationId);
+    formData.append(
+        "relative_paths",
+        JSON.stringify(
+            selected.map(file => file.webkitRelativePath || file.name)
+        )
+    );
+    selected.forEach(file => {
+        formData.append("files", file, file.name);
+    });
+
+    elements.attachCodeButton.disabled = true;
+    elements.attachFolderButton.disabled = true;
+    showToast(`Uploading ${selected.length} code file${selected.length === 1 ? "" : "s"}…`);
+
+    try {
+        const payload = await api(
+            "/api/coding/attachments",
+            {
+                method: "POST",
+                body: formData,
+            }
+        );
+
+        const existing = new Set(
+            pendingAttachments.map(item => item.path)
+        );
+        for (const attachment of payload.attachments || []) {
+            if (!existing.has(attachment.path)) {
+                pendingAttachments.push(attachment);
+                existing.add(attachment.path);
+            }
+        }
+        renderAttachments();
+        showToast("Code files attached. Describe what Jarvis should do.");
+    } catch (error) {
+        showToast(error.message);
+    } finally {
+        elements.attachCodeButton.disabled = false;
+        elements.attachFolderButton.disabled = false;
+        elements.codeFileInput.value = "";
+        elements.codeFolderInput.value = "";
+        elements.messageInput.focus();
+    }
+}
+
 async function loadStatus() {
     try {
         const status = await api("/api/status");
@@ -247,12 +347,18 @@ function setWelcomeVisible(visible) {
     elements.welcomePanel.classList.toggle("hidden", !visible);
 }
 
-function addUserMessage(text) {
+function addUserMessage(text, attachmentNames = []) {
     setWelcomeVisible(false);
     const row = document.createElement("article");
     row.className = "message-row user-row";
+    const attachmentMarkup = attachmentNames.length
+        ? `<div class="message-attachments">${attachmentNames
+            .map(name => `<span>${escapeHtml(name)}</span>`)
+            .join("")}</div>`
+        : "";
     row.innerHTML = `
         <div class="message-column">
+            ${attachmentMarkup}
             <div class="message-bubble">${escapeHtml(text)}</div>
         </div>
     `;
@@ -378,7 +484,15 @@ async function sendMessage(text) {
         conversationId = makeId();
     }
 
-    addUserMessage(message);
+    const attachments = pendingAttachments.map(item => ({
+        path: item.path,
+        name: item.relative_name || item.name,
+    }));
+
+    addUserMessage(
+        message,
+        attachments.map(item => item.name)
+    );
     elements.messageInput.value = "";
     resizeTextarea();
     updateCharacterCount();
@@ -393,6 +507,7 @@ async function sendMessage(text) {
                 message,
                 conversation_id: conversationId,
                 voice_enabled: voiceEnabled,
+                attachments: attachments.map(item => item.path),
             }),
         });
 
@@ -498,6 +613,8 @@ function startNewChat() {
     elements.messageList.innerHTML = "";
     elements.conversationTitle.textContent = "Jarvis";
     elements.messageInput.value = "";
+    pendingAttachments = [];
+    renderAttachments();
     setWelcomeVisible(true);
     hideThinking();
     closeCameraPanel();
@@ -899,6 +1016,18 @@ function bindEvents() {
     });
 
     elements.microphoneButton.addEventListener("click", toggleRecording);
+    elements.attachCodeButton.addEventListener("click", () => {
+        elements.codeFileInput.click();
+    });
+    elements.attachFolderButton.addEventListener("click", () => {
+        elements.codeFolderInput.click();
+    });
+    elements.codeFileInput.addEventListener("change", event => {
+        uploadCodeFiles(event.target.files);
+    });
+    elements.codeFolderInput.addEventListener("change", event => {
+        uploadCodeFiles(event.target.files);
+    });
     elements.cameraComposerButton.addEventListener("click", loadCameraSnapshot);
     elements.refreshCameraButton.addEventListener("click", loadCameraSnapshot);
     elements.closeCameraButton.addEventListener("click", closeCameraPanel);

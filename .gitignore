@@ -7,8 +7,11 @@ __pycache__/
 .ruff_cache/
 logs/*.log
 data/memory/*.json
+data/coding/*.json
+data/coding/uploads/
 data/conversations/*
 data/sensor_logs/*
 models/**/*.onnx
 models/**/*.pt
 .env
+data/profile/*.db*

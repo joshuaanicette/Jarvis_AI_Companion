@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import inspect
+import json
+import re
 import logging
 import subprocess
 import tempfile
 import threading
 import time
 import webbrowser
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import cv2
@@ -15,10 +17,12 @@ import uvicorn
 from fastapi import (
     FastAPI,
     File,
+    Form,
     HTTPException,
     UploadFile,
 )
 from fastapi.responses import (
+    FileResponse,
     HTMLResponse,
     Response,
 )
@@ -70,6 +74,17 @@ MAX_AUDIO_BYTES = (
     * 1024
     * 1024
 )
+
+CODE_UPLOAD_ROOT = (
+    PROJECT_ROOT
+    / "data"
+    / "coding"
+    / "uploads"
+)
+
+MAX_CODE_FILE_BYTES = 1 * 1024 * 1024
+MAX_CODE_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_CODE_FILES = 30
 
 
 class JayChatDashboard:
@@ -325,12 +340,21 @@ class JayChatDashboard:
                     flush=True,
                 )
 
+                attachments = self._validated_code_attachments(
+                    conversation_id=request.conversation_id,
+                    attachments=request.attachments,
+                )
+                effective_message = self._prepare_coding_message(
+                    message=message,
+                    attachments=attachments,
+                )
+
                 category = self._classify(
-                    message
+                    effective_message
                 )
 
                 model = self._select_model(
-                    message=message,
+                    message=effective_message,
                     category=category,
                 )
 
@@ -345,7 +369,7 @@ class JayChatDashboard:
 
                     response_text = (
                         self._process_message(
-                            message=message,
+                            message=effective_message,
                             voice_enabled=(
                                 request.voice_enabled
                             ),
@@ -417,6 +441,207 @@ class JayChatDashboard:
                     status_code=500,
                     detail=str(error),
                 ) from error
+
+        @self.app.post(
+            "/api/coding/attachments"
+        )
+        async def upload_code_attachments(
+            conversation_id: str = Form(...),
+            relative_paths: str = Form("[]"),
+            files: list[UploadFile] = File(...),
+        ) -> dict[str, object]:
+            if not re.fullmatch(
+                r"[A-Za-z0-9_-]{1,100}",
+                conversation_id,
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid conversation identifier.",
+                )
+
+            if not files or len(files) > MAX_CODE_FILES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Select between 1 and {MAX_CODE_FILES} code files.",
+                )
+
+            try:
+                requested_paths = json.loads(relative_paths)
+            except json.JSONDecodeError as error:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid attachment path manifest.",
+                ) from error
+
+            if not isinstance(requested_paths, list):
+                requested_paths = []
+
+            upload_root = (
+                CODE_UPLOAD_ROOT
+                / conversation_id
+            ).resolve()
+            upload_root.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            coding_agent = getattr(
+                self.application,
+                "coding_agent",
+                None,
+            )
+            allowed_suffixes = getattr(
+                coding_agent,
+                "ALLOWED_SUFFIXES",
+                set(),
+            )
+            blocked_parts = getattr(
+                coding_agent,
+                "BLOCKED_PARTS",
+                set(),
+            )
+
+            attachments: list[dict[str, object]] = []
+            total_bytes = 0
+
+            for index, upload in enumerate(files):
+                requested = (
+                    requested_paths[index]
+                    if index < len(requested_paths)
+                    else upload.filename
+                )
+                safe_path = PurePosixPath(
+                    str(requested or upload.filename or "code.txt")
+                    .replace("\\", "/")
+                )
+                parts = [
+                    part
+                    for part in safe_path.parts
+                    if part not in {"", "."}
+                ]
+
+                if (
+                    not parts
+                    or any(part == ".." for part in parts)
+                    or any(part in blocked_parts for part in parts)
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unsafe attachment path: {requested}",
+                    )
+
+                relative_path = Path(*parts)
+                if (
+                    allowed_suffixes
+                    and relative_path.suffix.casefold()
+                    not in allowed_suffixes
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Unsupported code file: {relative_path.name}",
+                    )
+
+                contents = await upload.read(
+                    MAX_CODE_FILE_BYTES + 1
+                )
+                await upload.close()
+
+                if len(contents) > MAX_CODE_FILE_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"{relative_path.name} is larger than 1 MB.",
+                    )
+
+                total_bytes += len(contents)
+                if total_bytes > MAX_CODE_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail="The selected code files exceed 10 MB total.",
+                    )
+
+                try:
+                    contents.decode("utf-8")
+                except UnicodeDecodeError as error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{relative_path.name} is not a UTF-8 text file.",
+                    ) from error
+
+                destination = (
+                    upload_root
+                    / relative_path
+                ).resolve()
+                try:
+                    destination.relative_to(
+                        upload_root
+                    )
+                except ValueError as error:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Attachment path escaped the upload workspace.",
+                    ) from error
+
+                destination.parent.mkdir(
+                    parents=True,
+                    exist_ok=True,
+                )
+                temporary = destination.with_suffix(
+                    destination.suffix + ".uploading"
+                )
+                temporary.write_bytes(contents)
+                temporary.replace(destination)
+
+                project_path = destination.relative_to(
+                    PROJECT_ROOT
+                ).as_posix()
+                attachments.append(
+                    {
+                        "name": relative_path.name,
+                        "relative_name": relative_path.as_posix(),
+                        "path": project_path,
+                        "size": len(contents),
+                        "download_url": (
+                            "/api/coding/attachments/download"
+                            f"?path={project_path}"
+                        ),
+                    }
+                )
+
+            return {
+                "attachments": attachments,
+            }
+
+        @self.app.get(
+            "/api/coding/attachments/download"
+        )
+        def download_code_attachment(
+            path: str,
+        ) -> FileResponse:
+            candidate = (
+                PROJECT_ROOT
+                / str(path)
+            ).resolve()
+            root = CODE_UPLOAD_ROOT.resolve()
+
+            try:
+                candidate.relative_to(root)
+            except ValueError as error:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Invalid attachment path.",
+                ) from error
+
+            if not candidate.is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail="Attachment not found.",
+                )
+
+            return FileResponse(
+                path=str(candidate),
+                filename=candidate.name,
+                media_type="text/plain",
+            )
 
         @self.app.post(
             "/api/transcribe"
@@ -863,6 +1088,108 @@ class JayChatDashboard:
                 "Jarvis chat dashboard "
                 "stopped"
             )
+        )
+
+    def _validated_code_attachments(
+        self,
+        conversation_id: str,
+        attachments: list[str],
+    ) -> list[str]:
+        if not attachments:
+            return []
+
+        if not re.fullmatch(
+            r"[A-Za-z0-9_-]{1,100}",
+            str(conversation_id),
+        ):
+            raise ValueError(
+                "Invalid conversation identifier."
+            )
+
+        allowed_root = (
+            CODE_UPLOAD_ROOT
+            / str(conversation_id)
+        ).resolve()
+        validated: list[str] = []
+
+        for raw_path in attachments[:MAX_CODE_FILES]:
+            candidate = (
+                PROJECT_ROOT
+                / str(raw_path)
+            ).resolve()
+            try:
+                candidate.relative_to(
+                    allowed_root
+                )
+            except ValueError as error:
+                raise ValueError(
+                    "A code attachment is outside this conversation workspace."
+                ) from error
+
+            if not candidate.is_file():
+                raise ValueError(
+                    f"Attached code file not found: {raw_path}"
+                )
+
+            validated.append(
+                candidate.relative_to(
+                    PROJECT_ROOT
+                ).as_posix()
+            )
+
+        return validated
+
+    @staticmethod
+    def _prepare_coding_message(
+        message: str,
+        attachments: list[str],
+    ) -> str:
+        if not attachments:
+            return message
+
+        normalized = message.casefold().strip()
+        coding_prefixes = (
+            "coding task:",
+            "code task:",
+            "propose code change:",
+            "coding analyze:",
+            "analyze code:",
+            "decipher code:",
+            "coding suggest:",
+            "suggest feature:",
+            "plan feature:",
+        )
+        if normalized.startswith(
+            coding_prefixes
+        ):
+            return message
+
+        joined_paths = " ".join(
+            attachments
+        )
+        analysis_terms = (
+            "analyze",
+            "explain",
+            "decipher",
+            "review",
+            "understand",
+            "what does",
+            "suggest",
+            "recommend",
+        )
+
+        if any(
+            term in normalized
+            for term in analysis_terms
+        ):
+            return (
+                f"coding analyze: {joined_paths}. "
+                f"User request: {message}"
+            )
+
+        return (
+            f"coding task: update {joined_paths}. "
+            f"User request: {message}"
         )
 
     def _process_message(

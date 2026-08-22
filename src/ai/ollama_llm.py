@@ -25,8 +25,14 @@ class OllamaLLM:
         prompt: str,
         model: str | None = None,
         system: str | None = None,
+        timeout: float | None = None,
     ) -> str:
         selected_model = model or self.model
+        request_timeout = (
+            float(timeout)
+            if timeout is not None
+            else self.timeout
+        )
 
         payload: dict[str, Any] = {
             "model": selected_model,
@@ -51,8 +57,14 @@ class OllamaLLM:
             response = requests.post(
                 f"{self.host}/api/generate",
                 json=payload,
-                timeout=self.timeout,
+                timeout=request_timeout,
             )
+
+        except requests.Timeout as error:
+            raise OllamaLLMError(
+                f"Ollama model {selected_model} timed out after "
+                f"{request_timeout:.0f} seconds."
+            ) from error
 
         except requests.RequestException as error:
             raise OllamaLLMError(
@@ -83,8 +95,14 @@ class OllamaLLM:
         self,
         messages: list[dict[str, str]],
         model: str | None = None,
+        timeout: float | None = None,
     ) -> str:
         selected_model = model or self.model
+        request_timeout = (
+            float(timeout)
+            if timeout is not None
+            else self.timeout
+        )
 
         payload = {
             "model": selected_model,
@@ -106,8 +124,14 @@ class OllamaLLM:
             response = requests.post(
                 f"{self.host}/api/chat",
                 json=payload,
-                timeout=self.timeout,
+                timeout=request_timeout,
             )
+
+        except requests.Timeout as error:
+            raise OllamaLLMError(
+                f"Ollama model {selected_model} timed out after "
+                f"{request_timeout:.0f} seconds."
+            ) from error
 
         except requests.RequestException as error:
             raise OllamaLLMError(
