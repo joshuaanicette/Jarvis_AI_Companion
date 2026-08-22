@@ -6,6 +6,14 @@ from src.ai.coding_agent import ApprovalRequiredError, CodingAgent
 from src.ai.user_style import UserStyleManager
 
 
+class FakeLLM:
+    def __init__(self, response: str):
+        self.response = response
+
+    def generate(self, prompt: str, model: str) -> str:
+        return self.response
+
+
 def test_style_manager_learns_repeated_slang(tmp_path: Path):
     manager = UserStyleManager(tmp_path / "style.json")
     manager.observe("Yo bro that was funny lol")
@@ -33,3 +41,15 @@ def test_coding_agent_blocks_path_escape(tmp_path: Path):
     agent = CodingAgent(tmp_path, tmp_path / "proposals.json")
     with pytest.raises(ValueError):
         agent.propose("unsafe", {"../outside.py": "bad"})
+
+
+def test_coding_agent_stages_a_new_file_from_prompt(tmp_path: Path):
+    agent = CodingAgent(tmp_path, tmp_path / "proposals.json")
+    llm = FakeLLM(
+        '{"summary":"Add helper","changes":[{"path":"src/helper.py","content":"VALUE = 1\\n"}]}'
+    )
+    proposal = agent.propose_from_prompt(
+        "Create src/helper.py for a small helper module.", llm
+    )
+    assert proposal.changes[0].path == "src/helper.py"
+    assert not (tmp_path / "src/helper.py").exists()
