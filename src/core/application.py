@@ -126,9 +126,17 @@ class Application:
             ),
         )
 
+        self.reasoning_model = llm_config.get(
+            "reasoning_model",
+            "qwen2.5:latest",
+        )
+
         self.model_router = ModelRouter(
-            fast_model="gemma3:1b",
-            reasoning_model="qwen2.5:3b",
+            fast_model=llm_config.get(
+                "model",
+                "gemma3:1b",
+            ),
+            reasoning_model=self.reasoning_model,
         )
 
         # Local personal knowledge database
@@ -341,7 +349,7 @@ class Application:
             CodingAgentTool(
                 coding_agent=self.coding_agent,
                 llm=self.llm,
-                model="qwen2.5:3b",
+                model=self.reasoning_model,
             )
         )
 
