@@ -95,6 +95,60 @@ class CodingAgent:
         self._save()
         return proposal
 
+    def propose_from_prompt(self, task: str, llm, model: str = "qwen2.5:3b") -> ChangeProposal:
+        """Ask the reasoning model for complete replacement files, then stage a diff."""
+        mentioned = set(
+            re.findall(
+                r"(?:^|\s)([A-Za-z0-9_./-]+\.(?:py|js|ts|tsx|jsx|json|ya?ml|toml|md|html|css|sh|txt))",
+                str(task),
+            )
+        )
+        if not mentioned:
+            raise ValueError(
+                "Name at least one project file in the coding task so Jarvis knows what to inspect."
+            )
+        sources: list[str] = []
+        for relative_path in sorted(mentioned):
+            path = self._resolve(relative_path)
+            content = path.read_text(encoding="utf-8") if path.exists() else ""
+            if len(content) > 30_000:
+                raise ValueError(f"{relative_path} is too large for a safe local proposal.")
+            sources.append(f"FILE: {relative_path}\n```\n{content}\n```")
+
+        prompt = f"""
+You are Jarvis's local coding planner. Prepare a proposed change, but do not
+claim that files were edited or tests were run. Return JSON only:
+{{
+  "summary": "short description",
+  "changes": [
+    {{"path": "relative/project/file.py", "content": "complete replacement file"}}
+  ]
+}}
+Every changed file must be one explicitly included below. Preserve unrelated
+behavior and return the complete replacement content, never a partial snippet.
+
+TASK:
+{task}
+
+CURRENT FILES:
+{chr(10).join(sources)}
+""".strip()
+        raw = llm.generate(prompt=prompt, model=model)
+        match = re.search(r"\{.*\}", str(raw), flags=re.DOTALL)
+        if not match:
+            raise ValueError("The coding model did not return a JSON proposal.")
+        payload = json.loads(match.group(0))
+        replacements: dict[str, str] = {}
+        for item in payload.get("changes", []):
+            path = str(item.get("path", "")).strip()
+            if path not in mentioned:
+                raise ValueError(f"The model attempted an unrequested file: {path}")
+            replacements[path] = str(item.get("content", ""))
+        return self.propose(
+            summary=str(payload.get("summary", task)),
+            replacements=replacements,
+        )
+
     def preview(self, proposal_id: str) -> str:
         proposal = self._require(proposal_id)
         sections = [f"Proposal {proposal.proposal_id}: {proposal.summary}"]
