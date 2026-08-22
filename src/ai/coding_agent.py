@@ -147,7 +147,7 @@ class CodingAgent:
 
         return str(result).strip()
 
-    def analyze_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
+    def analyze_from_prompt(self, request: str, llm, model: str = "qwen2.5:latest") -> str:
         """Explain named files and relate them to the requested functionality."""
         paths = self._paths_from_text(request)
         if not paths:
@@ -175,27 +175,58 @@ SOURCE FILES:
 """.strip()
         return self._generate(llm, prompt, model)
 
-    def suggest_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
+    def suggest_from_prompt(self, request: str, llm, model: str = "qwen2.5:latest") -> str:
         """Suggest a feature design without reading or altering source contents."""
         self._record_code_request(
             mode="suggest",
             request=request,
             paths=set(),
         )
-        project_index = "\n".join(f"- {path}" for path in self.list_files(limit=160))
+        project_index = "\n".join(
+            f"- {path}"
+            for path in self.list_files(limit=160)
+        )
+        learned_code = ""
+        if self.profile_database is not None:
+            try:
+                learned_code = (
+                    self.profile_database.get_code_context(
+                        request,
+                        max_documents=4,
+                        max_chars=min(
+                            8_000,
+                            self.max_total_source_chars // 2,
+                        ),
+                    )
+                )
+            except Exception:
+                learned_code = ""
+
+        if learned_code:
+            learned_section = (
+                "PREVIOUSLY SELECTED LOCAL CODE (may be stale):\n"
+                + learned_code
+            )
+        else:
+            learned_section = (
+                "No previously selected code matched this request."
+            )
+
         prompt = f"""
 You are Jarvis's local software architect. The user wants this functionality:
 {request}
 
-Based only on this project file index, recommend a practical feature design.
-State: likely files to inspect first, new files that may be useful, data flow,
-tools or dependencies, security/safety considerations, and an incremental
-implementation plan. If the existing index is insufficient, name the exact
-files the user should ask Jarvis to analyze next. Do not claim that you read
-source code, changed files, or ran tests.
+Use the project file index and any matching code the user previously selected
+to recommend a practical feature design. Treat stored code as potentially
+stale and say which files should be re-opened before an edit. State: likely
+files to inspect first, new files that may be useful, data flow, tools or
+dependencies, security/safety considerations, and an incremental
+implementation plan. Do not claim that files were changed or tests were run.
 
 PROJECT FILE INDEX:
 {project_index}
+
+{learned_section}
 """.strip()
         return self._generate(llm, prompt, model)
 
@@ -217,7 +248,7 @@ PROJECT FILE INDEX:
         self._save()
         return proposal
 
-    def propose_from_prompt(self, task: str, llm, model: str = "qwen2.5:3b") -> ChangeProposal:
+    def propose_from_prompt(self, task: str, llm, model: str = "qwen2.5:latest") -> ChangeProposal:
         """Generate a complete-file proposal; existing files remain unchanged until approved."""
         mentioned = self._paths_from_text(task)
         if not mentioned:
@@ -260,7 +291,7 @@ CURRENT FILES:
             replacements[path] = str(item.get("content", ""))
         return self.propose(str(payload.get("summary", task)), replacements)
 
-    def propose_new_file(self, path: str, description: str, llm, model: str = "qwen2.5:3b") -> ChangeProposal:
+    def propose_new_file(self, path: str, description: str, llm, model: str = "qwen2.5:latest") -> ChangeProposal:
         destination = self._resolve(path)
         if destination.exists():
             raise ValueError(f"{path} already exists; use a coding task to modify it.")
