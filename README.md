@@ -482,7 +482,7 @@ ollama --version
 
 ```bash
 ollama pull gemma3:1b
-ollama pull qwen2.5:3b
+ollama pull qwen2.5:latest
 ```
 
 Confirm installed models:
@@ -538,7 +538,7 @@ GOOGLE_MAPS_API_KEY=your_google_maps_api_key
 
 OLLAMA_HOST=http://localhost:11434
 FAST_MODEL=gemma3:1b
-REASONING_MODEL=qwen2.5:3b
+REASONING_MODEL=qwen2.5:latest
 ```
 
 Do not commit `.env` to GitHub.
@@ -569,7 +569,7 @@ assistant:
 llm:
   host: http://localhost:11434
   model: gemma3:1b
-  reasoning_model: qwen2.5:3b
+  reasoning_model: qwen2.5:latest
 
 vision:
   width: 640
@@ -1093,7 +1093,7 @@ Download missing models:
 
 ```bash
 ollama pull gemma3:1b
-ollama pull qwen2.5:3b
+ollama pull qwen2.5:latest
 ```
 
 Check the service:
