@@ -1,12 +1,14 @@
 import threading
 import time
 
+from src.ai.coding_agent import CodingAgent
 from src.ai.memory import MemoryManager
 from src.ai.memory_analyzer import MemoryAnalyzer
 from src.ai.memory_retriever import MemoryRetriever
 from src.ai.model_router import ModelRouter
 from src.ai.ollama_llm import OllamaLLM
 from src.ai.subject_router import SubjectRouter
+from src.ai.user_style import UserStyleManager
 
 from src.automation.productivity_manager import (
     ProductivityManager,
@@ -31,6 +33,7 @@ from src.robotics.mock_motor_controller import (
 )
 from src.robotics.robot import Robot
 
+from src.tools.coding_agent_tool import CodingAgentTool
 from src.tools.navigation_tool import (
     NavigationTool,
 )
@@ -137,6 +140,15 @@ class Application:
         self.memory_retriever = MemoryRetriever(
             memory_manager=self.memory,
             max_results=8,
+        )
+
+        self.user_style = UserStyleManager(
+            path="data/memory/user_style.json",
+        )
+
+        self.coding_agent = CodingAgent(
+            workspace=".",
+            proposal_path="data/coding/proposals.json",
         )
 
         self.subject_router = SubjectRouter()
@@ -272,6 +284,12 @@ class Application:
 
         self.tools.register(
             SystemHealthTool()
+        )
+
+        self.tools.register(
+            CodingAgentTool(
+                self.coding_agent
+            )
         )
 
         self.tools.register(
