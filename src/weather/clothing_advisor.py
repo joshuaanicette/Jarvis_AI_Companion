@@ -6,6 +6,12 @@ class ClothingAdvisor:
     Produces practical clothing recommendations from weather data.
     """
 
+    def __init__(
+        self,
+        profile_database=None,
+    ) -> None:
+        self.profile_database = profile_database
+
     def recommend(
         self,
         weather: dict[str, Any],
@@ -179,8 +185,29 @@ class ClothingAdvisor:
             "your location",
         )
 
-        return (
+        response = (
             f"For {city}, I recommend that you "
             + ", ".join(recommendations)
             + "."
         )
+
+        if self.profile_database is not None:
+            try:
+                preferences = (
+                    self.profile_database
+                    .get_clothing_preferences(
+                        limit=3
+                    )
+                )
+            except Exception:
+                preferences = []
+
+            if preferences:
+                response += (
+                    " I also considered your saved clothing "
+                    "preferences: "
+                    + "; ".join(preferences)
+                    + "."
+                )
+
+        return response
