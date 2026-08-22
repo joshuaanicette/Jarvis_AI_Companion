@@ -123,12 +123,14 @@ Jarvis routes requests between local Ollama models based on the type and complex
 
 ### Memory and Persistence
 
-* Confirmed user memories
-* Interest detection and reinforcement
-* Context retrieval for relevant prompts
-* JSON-based personal memory
+* Local SQLite personal profile at `data/profile/jarvis_profile.db`
+* Confirmed preferences and migrated JSON memories
+* Interest detection and reinforcement without restart inflation
+* Learned tone, slang, humor, and recurring phrasing signals
+* Attached-code content, language, path, and coding-request history
+* Profile context for engineering, coding, weather, clothing, and general prompts
+* User-readable profile status and selective forgetting commands
 * SQLite-based reminders and tasks
-* Expandable SQLite conversation history
 
 ---
 
@@ -976,13 +978,27 @@ CREATE TABLE messages (
 );
 ```
 
-### Memory File
+### Personal Profile Database
 
 ```text
-data/memory/memory.json
+data/profile/jarvis_profile.db
 ```
 
-Stores confirmed memories and inferred user interests separately.
+Stores durable personal facts and preferences, interests, communication-style
+signals, recently analyzed code documents, coding requests, and interaction
+patterns. Existing confirmed and inferred memories from
+`data/memory/memory.json` are imported when Jarvis starts.
+
+The database is local and excluded from Git. Review or remove learned data with:
+
+```text
+profile status
+what do you know about me
+profile forget: robotics
+```
+
+The older JSON memory file remains the source for the existing memory analyzer;
+the SQLite profile provides structured cross-feature personalization.
 
 ---
 
