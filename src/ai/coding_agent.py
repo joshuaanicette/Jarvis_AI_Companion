@@ -45,6 +45,7 @@ class CodingAgent:
         proposal_path: str | Path = "data/coding/proposals.json",
         request_timeout_seconds: float = 600.0,
         max_total_source_chars: int = 24_000,
+        profile_database=None,
     ) -> None:
         self.workspace = Path(workspace).resolve()
         self.proposal_path = Path(proposal_path)
@@ -57,6 +58,7 @@ class CodingAgent:
             4_000,
             int(max_total_source_chars),
         )
+        self.profile_database = profile_database
         self._proposals: dict[str, ChangeProposal] = {}
         self._load()
 
@@ -116,6 +118,16 @@ class CodingAgent:
                 )
 
             sources.append(f"FILE: {relative_path}\n---\n{content}\n---")
+
+            if self.profile_database is not None and content:
+                try:
+                    self.profile_database.store_code_document(
+                        path=relative_path,
+                        content=content,
+                    )
+                except Exception:
+                    pass
+
         return sources
 
     def _generate(self, llm, prompt: str, model: str) -> str:
@@ -141,6 +153,11 @@ class CodingAgent:
         if not paths:
             raise ValueError("Name the file or files Jarvis should analyze.")
         sources = self._sources_for(paths, allow_missing=False)
+        self._record_code_request(
+            mode="analyze",
+            request=request,
+            paths=paths,
+        )
         prompt = f"""
 You are Jarvis's local code analyst. Explain the supplied code accurately.
 Do not claim that code was changed or tests were run.
@@ -160,6 +177,11 @@ SOURCE FILES:
 
     def suggest_from_prompt(self, request: str, llm, model: str = "qwen2.5:3b") -> str:
         """Suggest a feature design without reading or altering source contents."""
+        self._record_code_request(
+            mode="suggest",
+            request=request,
+            paths=set(),
+        )
         project_index = "\n".join(f"- {path}" for path in self.list_files(limit=160))
         prompt = f"""
 You are Jarvis's local software architect. The user wants this functionality:
@@ -201,6 +223,11 @@ PROJECT FILE INDEX:
         if not mentioned:
             raise ValueError("Name each project file that may be created or changed.")
         sources = self._sources_for(mentioned, allow_missing=True)
+        self._record_code_request(
+            mode="proposal",
+            request=task,
+            paths=mentioned,
+        )
         prompt = f"""
 You are Jarvis's local coding planner. Prepare a proposed change but do not
 claim files were edited or tests were run. Return JSON only:
@@ -284,6 +311,17 @@ CURRENT FILES:
                 staged.append((temporary, destination))
             for temporary, destination in staged:
                 os.replace(temporary, destination)
+
+            if self.profile_database is not None:
+                for change in proposal.changes:
+                    try:
+                        self.profile_database.store_code_document(
+                            path=change.path,
+                            content=change.replacement,
+                            request=proposal.summary,
+                        )
+                    except Exception:
+                        pass
         finally:
             for temporary, _ in staged:
                 if temporary.exists():
@@ -292,6 +330,23 @@ CURRENT FILES:
         proposal.approved = True
         proposal.applied = True
         self._save()
+
+    def _record_code_request(
+        self,
+        mode: str,
+        request: str,
+        paths: set[str] | list[str],
+    ) -> None:
+        if self.profile_database is None:
+            return
+        try:
+            self.profile_database.record_code_request(
+                mode=mode,
+                request=request,
+                paths=paths,
+            )
+        except Exception:
+            return
 
     def _require(self, proposal_id: str) -> ChangeProposal:
         proposal = self._proposals.get(str(proposal_id).casefold())
