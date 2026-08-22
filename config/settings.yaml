@@ -7,6 +7,7 @@ llm:
   provider: ollama
   host: http://localhost:11434
   model: gemma3:1b
+  reasoning_model: qwen2.5:latest
 
 coding:
   timeout_seconds: 600
