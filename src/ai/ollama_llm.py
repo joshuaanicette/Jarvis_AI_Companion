@@ -15,10 +15,14 @@ class OllamaLLM:
         host: str = "http://localhost:11434",
         model: str = "gemma3:1b",
         timeout: float = 180.0,
+        keep_alive: str = "2m",
+        num_predict: int = 500,
     ):
         self.host = host.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.keep_alive = keep_alive
+        self.num_predict = num_predict
 
     def generate(
         self,
@@ -32,10 +36,10 @@ class OllamaLLM:
             "model": selected_model,
             "prompt": prompt,
             "stream": False,
-            "keep_alive": "10m",
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": 0.4,
-                "num_predict": 500,
+                "num_predict": self.num_predict,
             },
         }
 
@@ -90,10 +94,10 @@ class OllamaLLM:
             "model": selected_model,
             "messages": messages,
             "stream": False,
-            "keep_alive": "10m",
+            "keep_alive": self.keep_alive,
             "options": {
                 "temperature": 0.4,
-                "num_predict": 500,
+                "num_predict": self.num_predict,
             },
         }
 
