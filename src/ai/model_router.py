@@ -22,6 +22,20 @@ class ModelRouter:
         "technical",
     }
 
+    CODING_CATEGORIES = {
+        "programming",
+        "software",
+        "software engineering",
+        "embedded",
+        "embedded systems",
+        "c",
+        "c++",
+        "cpp",
+        "firmware",
+        "linux",
+        "fpga",
+    }
+
     EXPLICIT_QWEN_PHRASES = (
         "use qwen",
         "have qwen",
@@ -48,13 +62,64 @@ class ModelRouter:
         "technical",
     )
 
+    CODING_PHRASES = (
+        "code",
+        "coding",
+        "debug",
+        "compiler",
+        "compile",
+        "build error",
+        "linker",
+        "segmentation fault",
+        "unit test",
+        "pytest",
+        "cmake",
+        "makefile",
+        "platformio",
+        "firmware",
+        "embedded",
+        "uart",
+        "spi",
+        "i2c",
+        "gpio",
+        "interrupt",
+        "memory mapped",
+        "pointer",
+        "c++",
+        "cpp",
+        "verilog",
+        "vitis",
+        "vivado",
+    )
+
+    COMPLEX_CODING_PHRASES = (
+        "refactor",
+        "architecture",
+        "multi file",
+        "multiple files",
+        "race condition",
+        "memory leak",
+        "undefined behavior",
+        "linker error",
+        "toolchain",
+        "driver",
+        "device tree",
+        "rtos",
+        "bare metal",
+        "bare-metal",
+    )
+
     def __init__(
         self,
         fast_model: str = "gemma3:1b",
         reasoning_model: str = "qwen2.5:3b",
+        coding_model: str = "qwen2.5-coder:3b",
+        coding_strong_model: str = "qwen2.5-coder:7b",
     ):
         self.fast_model = fast_model
         self.reasoning_model = reasoning_model
+        self.coding_model = coding_model
+        self.coding_strong_model = coding_strong_model
 
     def select_model(
         self,
@@ -62,19 +127,47 @@ class ModelRouter:
         category: str = "general",
     ) -> ModelDecision:
         normalized = self._normalize(text)
-        normalized_category = (
-            str(category).casefold().strip()
-        )
+        normalized_category = str(category).casefold().strip()
 
         explicit_qwen = any(
             phrase in normalized
             for phrase in self.EXPLICIT_QWEN_PHRASES
         )
 
-        technical_category = (
-            normalized_category
-            in self.REASONING_CATEGORIES
+        coding_category = normalized_category in self.CODING_CATEGORIES
+        coding_request = any(
+            phrase in normalized
+            for phrase in self.CODING_PHRASES
         )
+
+        complex_coding = any(
+            phrase in normalized
+            for phrase in self.COMPLEX_CODING_PHRASES
+        )
+
+        if coding_category or coding_request:
+            if complex_coding:
+                return ModelDecision(
+                    model=self.coding_strong_model,
+                    reason=(
+                        "Complex coding/embedded work detected; "
+                        "using the stronger local coder."
+                    ),
+                    category=normalized_category,
+                    requires_reasoning=True,
+                )
+
+            return ModelDecision(
+                model=self.coding_model,
+                reason=(
+                    "Coding or embedded-systems work detected; "
+                    "using the lightweight local coder."
+                ),
+                category=normalized_category,
+                requires_reasoning=True,
+            )
+
+        technical_category = normalized_category in self.REASONING_CATEGORIES
 
         reasoning_request = any(
             phrase in normalized
@@ -123,31 +216,15 @@ class ModelRouter:
             reasons = []
 
             if explicit_qwen:
-                reasons.append(
-                    "the user explicitly requested Qwen"
-                )
-
+                reasons.append("the user explicitly requested Qwen")
             if technical_category:
-                reasons.append(
-                    f"the subject category is "
-                    f"{normalized_category}"
-                )
-
+                reasons.append(f"the subject category is {normalized_category}")
             if reasoning_request:
-                reasons.append(
-                    "the prompt requests detailed reasoning"
-                )
-
+                reasons.append("the prompt requests detailed reasoning")
             if mathematical_notation:
-                reasons.append(
-                    "mathematical notation was detected"
-                )
-
+                reasons.append("mathematical notation was detected")
             if circuit_request:
-                reasons.append(
-                    "engineering or circuit terminology "
-                    "was detected"
-                )
+                reasons.append("engineering or circuit terminology was detected")
 
             return ModelDecision(
                 model=self.reasoning_model,
@@ -158,52 +235,20 @@ class ModelRouter:
 
         return ModelDecision(
             model=self.fast_model,
-            reason=(
-                "The request appears conversational "
-                "or low-complexity."
-            ),
+            reason="The request appears conversational or low-complexity.",
             category=normalized_category,
             requires_reasoning=False,
         )
 
-    def route(
-        self,
-        text: str,
-        category: str = "general",
-    ) -> ModelDecision:
-        return self.select_model(
-            text=text,
-            category=category,
-        )
+    def route(self, text: str, category: str = "general") -> ModelDecision:
+        return self.select_model(text=text, category=category)
 
-    def choose_model(
-        self,
-        text: str,
-        category: str = "general",
-    ) -> ModelDecision:
-        return self.select_model(
-            text=text,
-            category=category,
-        )
+    def choose_model(self, text: str, category: str = "general") -> ModelDecision:
+        return self.select_model(text=text, category=category)
 
     @staticmethod
-    def _normalize(
-        text: str,
-    ) -> str:
+    def _normalize(text: str) -> str:
         normalized = str(text).casefold()
-
-        normalized = normalized.replace(
-            "intergral",
-            "integral",
-        )
-
-        normalized = normalized.replace(
-            "intergration",
-            "integration",
-        )
-
-        return re.sub(
-            r"\s+",
-            " ",
-            normalized,
-        ).strip()
+        normalized = normalized.replace("intergral", "integral")
+        normalized = normalized.replace("intergration", "integration")
+        return re.sub(r"\s+", " ", normalized).strip()
